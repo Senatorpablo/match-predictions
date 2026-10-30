@@ -4,6 +4,12 @@ A clean, mobile-first match-prediction website that also installs as a phone app
 
 **Stack:** Node.js 18+ (tested on Node 24), Express, SQLite (better-sqlite3), server-rendered HTML, vanilla JS. No paid services.
 
+## Live demo
+
+GitHub Pages serves a static clickable demo from `docs/` on `main` (example data, stored only in your browser):
+
+https://senatorpablo.github.io/match-predictions/
+
 ## Run it
 ```bash
 npm install

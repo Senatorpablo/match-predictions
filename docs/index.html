@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Home · Matchday</title>
+<meta name="theme-color" content="#0b1020">
+<meta name="description" content="Predict scores, climb the leaderboard.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="demo.css">
+<script>document.documentElement.dataset.theme=localStorage.theme||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')</script>
+</head>
+<body>
+<div class="bg"></div>
+<noscript><main class="wrap"><div class="empty card" style="margin-top:48px"><div class="empty-ico">⚽</div><h3>JavaScript is required</h3><p class="muted">This demo runs entirely in your browser.</p></div></main></noscript>
+<div id="app"></div>
+<script src="demo.js"></script>
+</body>
+</html>

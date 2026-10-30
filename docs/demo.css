@@ -1,0 +1,32 @@
+/* Demo chrome only. The visual system is styles.css, copied from the app. */
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 16px;
+  font-size: .8rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--gold);
+  background: rgba(245, 185, 66, .14);
+  border-bottom: 1px solid rgba(245, 185, 66, .28);
+}
+[data-theme=light] .demo-banner { color: #8a5a00; background: rgba(245, 185, 66, .28); }
+.demo-banner select,
+.demo-banner button {
+  font: 600 .75rem Inter, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--card-b);
+  border-radius: 99px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.demo-banner label { display: inline-flex; align-items: center; gap: 6px; color: inherit; font-size: inherit; font-weight: inherit; }
+.demo-accounts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.fixture { scroll-margin-top: 88px; }
+@media (max-width: 380px) {
+  .tabbar a { font-size: .62rem; padding: 4px 2px; }
+}
