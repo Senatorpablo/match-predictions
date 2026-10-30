@@ -54,3 +54,22 @@ label{display:flex;flex-direction:column;gap:6px;font-size:.85rem;font-weight:60
 footer{padding:40px 18px 30px;text-align:center}
 @keyframes rise{from{opacity:0;transform:translateY(12px)}}@keyframes drop{from{opacity:0;transform:translateY(-8px)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* Markets (SportyBet-style option grid; points only) */
+.mkts{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.mkt{margin:0}.mkt-h{display:flex;justify-content:space-between;align-items:center;font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+.cs-h{margin-top:14px}.mkt-pts{font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent2)}.pill.xs{padding:1px 8px;font-size:.68rem;text-transform:none;letter-spacing:0}
+.opts{display:grid;gap:6px}.opts.n2{grid-template-columns:1fr 1fr}.opts.n3{grid-template-columns:1fr 1fr 1fr}
+.opt{display:flex;flex-direction:column;align-items:center;gap:1px;padding:8px 4px;border-radius:12px;border:1px solid var(--card-b);background:var(--input);color:var(--text);cursor:pointer;font:inherit;transition:background .15s,border-color .15s,transform .1s;-webkit-tap-highlight-color:transparent;min-height:46px}
+.opt b{font-size:.95rem;font-weight:800}.opt span{font-size:.68rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.opt:not(:disabled):hover{border-color:var(--accent)}.opt:not(:disabled):active{transform:scale(.97)}
+.opt.on{background:linear-gradient(135deg,var(--accent),#5b8cff);border-color:transparent;color:#fff}.opt.on span{color:rgba(255,255,255,.85)}
+.opt:disabled{cursor:default}.mkts.closed .opt:not(.on):not(.hit){opacity:.55}
+.opt.hit{box-shadow:inset 0 0 0 2px var(--green)}.opt.on.won{background:linear-gradient(135deg,#16a34a,#22c55e)}.opt.on.lost{background:linear-gradient(135deg,#be123c,#f43f5e)}.opt.on.void{background:#64748b}
+.opt.busy{opacity:.6;pointer-events:none}
+.mkt-pick{border:1px solid var(--card-b);border-radius:14px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}.mkt-pick legend{font-size:.85rem;font-weight:600;color:var(--muted);padding:0 6px}
+.chk{flex-direction:row;align-items:center;gap:8px;font-weight:500;color:var(--text)}.chk input{width:18px;height:18px;padding:0;accent-color:var(--accent)}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.predict.tight input[name^=ht_]{width:54px}
+.picklist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.pk{font-size:.76rem;padding:3px 4px 3px 10px;border-radius:99px;background:var(--input);display:inline-flex;align-items:center;gap:4px}
+@media(max-width:400px){.opt span{font-size:.62rem}.mkt-pick{grid-template-columns:1fr}}
+.admin-row .predict.tight.ht{order:3;flex-basis:100%;justify-content:flex-end;flex-wrap:wrap}.admin-row .predict.tight.ht input{width:56px}

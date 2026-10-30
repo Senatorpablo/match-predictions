@@ -1,6 +1,7 @@
 /* Static Matchday demo. State lives in localStorage. All links are relative or in-page hashes. */
 (() => {
-  const KEY = 'matchday-demo-v1';
+  const KEY = 'matchday-demo-v2';
+  const MK = window.Markets;
   const QUICK = ['1-0', '2-1', '1-1', '0-0', '1-2', '0-1'];
   const ICONS = { home: '⌂', fixtures: '⚽', leaderboard: '🏆', me: '★', admin: '⚙' };
   const PATHS = ['/', '/fixtures', '/me', '/leaderboard', '/admin', '/admin/users', '/login', '/signup'];
@@ -33,19 +34,28 @@
       const f = s.fixtures.find(x => x.id === p.fixture_id);
       p.points = f ? scoreOf(p, f, s.settings) : null;
     }
+    for (const k of s.picks) {
+      const f = s.fixtures.find(x => x.id === k.fixture_id);
+      const r = f ? MK.settle(k.market, k.selection, f, s.settings.markets) : { status: null, points: null };
+      k.status = r.status; k.points = r.points;
+    }
   }
+  const exactHit = (p, s) => { const f = s.fixtures.find(x => x.id === p.fixture_id); return f && f.home_score === p.home_goals && f.away_score === p.away_goals; };
   function leaderboard(s) {
     return s.users.filter(u => !u.is_admin).map(u => {
       const mine = s.predictions.filter(p => p.user_id === u.id);
       const settled = mine.filter(p => p.points != null);
+      const kp = s.picks.filter(k => k.user_id === u.id && k.status);
+      const exact = settled.filter(p => exactHit(p, s)).length;
       return {
         id: u.id,
         name: u.name,
-        pts: settled.reduce((a, p) => a + p.points, 0),
-        played: settled.length,
-        exact: settled.filter(p => p.points === s.settings.exact && p.points > 0).length
+        pts: settled.reduce((a, p) => a + p.points, 0) + kp.reduce((a, k) => a + (k.points || 0), 0),
+        played: settled.length + kp.length,
+        won: kp.filter(k => k.status === 'won').length + exact,
+        exact
       };
-    }).sort((a, b) => b.pts - a.pts || b.exact - a.exact || a.name.localeCompare(b.name));
+    }).sort((a, b) => b.pts - a.pts || b.exact - a.exact || b.won - a.won || a.name.localeCompare(b.name));
   }
   function byKick(dir = 1) {
     return (a, b) => (Date.parse(a.kickoff) - Date.parse(b.kickoff)) * dir;
@@ -55,9 +65,9 @@
     const day = 864e5;
     const iso = (d, h) => { const t = new Date(now + d * day); t.setUTCHours(h, 0, 0, 0); return t.toISOString(); };
     const fx = [
-      ['Arsenal', 'Chelsea', 'Premier League', -6, 15, 'Emirates Stadium', 2, 1],
-      ['Real Madrid', 'Barcelona', 'La Liga', -4, 20, 'Santiago Bernabéu', 1, 1],
-      ['Bayern Munich', 'Dortmund', 'Bundesliga', -2, 17, 'Allianz Arena', 3, 0],
+      ['Arsenal', 'Chelsea', 'Premier League', -6, 15, 'Emirates Stadium', 2, 1, 1, 0],
+      ['Real Madrid', 'Barcelona', 'La Liga', -4, 20, 'Santiago Bernabéu', 1, 1, 0, 1],
+      ['Bayern Munich', 'Dortmund', 'Bundesliga', -2, 17, 'Allianz Arena', 3, 0, 2, 0],
       ['Liverpool', 'Man City', 'Premier League', 1, 16, 'Anfield'],
       ['Inter', 'AC Milan', 'Serie A', 2, 19, 'San Siro'],
       ['PSG', 'Marseille', 'Ligue 1', 3, 20, 'Parc des Princes'],
@@ -66,9 +76,11 @@
       ['Juventus', 'Napoli', 'Serie A', 8, 19, 'Allianz Stadium']
     ];
     const created = new Date(now).toISOString();
+    const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2,CS', DEF = MK.DEFAULT.join(',');
+    const MKS = [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB,CS', DEF, '1X2,OU25,BTTS,CS', DEF];
     const fixtures = fx.map((f, i) => ({
       id: i + 1, home_team: f[0], away_team: f[1], competition: f[2], kickoff: iso(f[3], f[4]),
-      venue: f[5], home_score: f[6] ?? null, away_score: f[7] ?? null, is_example: 1, created_at: created
+      venue: f[5], home_score: f[6] ?? null, away_score: f[7] ?? null, ht_home: f[8] ?? null, ht_away: f[9] ?? null, markets: MKS[i], is_example: 1, created_at: created
     }));
     const users = [
       { id: 1, name: 'Admin', email: 'admin@matchday.local', password: 'demo1234', is_admin: 1, example: 1, created_at: created },
@@ -82,7 +94,15 @@
     users.slice(1).forEach((u, i) => picks[i].forEach(([h, a], j) => {
       predictions.push({ id: pid++, user_id: u.id, fixture_id: fixtures[j].id, home_goals: h, away_goals: a, points: null });
     }));
-    const state = { version: 1, nextId: 100, sessionUserId: 2, settings: { exact: 3, outcome: 1 }, users, fixtures, predictions };
+    const mp = [
+      [[0, '1X2', '1'], [0, 'OU25', 'O'], [0, 'BTTS', 'Y'], [1, 'DNB', '1'], [1, 'DC', 'X2'], [1, 'HT1X2', 'X'], [2, '1X2', '1'], [2, 'BTTS', 'N'], [3, '1X2', 'X'], [3, 'OU25', 'O']],
+      [[0, 'DC', '1X'], [0, 'OU35', 'U'], [1, '1X2', 'X'], [1, 'BTTS', 'Y'], [2, 'OU25', 'O'], [2, 'HT1X2', '1'], [3, 'BTTS', 'Y'], [4, 'DC', '1X']],
+      [[0, '1X2', '2'], [0, 'BTTS', 'N'], [1, 'OU15', 'O'], [1, 'DNB', '2'], [2, 'DC', '1X'], [2, 'OU35', 'U'], [3, '1X2', '2']]
+    ];
+    const kpicks = [];
+    users.slice(1).forEach((u, i) => mp[i].forEach(([j, market, selection]) => kpicks.push({ id: pid++, user_id: u.id, fixture_id: fixtures[j].id, market, selection, status: null, points: null })));
+    const markets = {}; MK.ORDER.forEach(k => { if (k !== 'CS') markets[k] = MK.MARKETS[k].def; });
+    const state = { version: 2, nextId: 1000, sessionUserId: 2, settings: { exact: 5, outcome: 1, markets }, users, fixtures, predictions, picks: kpicks };
     recompute(state);
     return state;
   }
@@ -97,7 +117,7 @@
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const s = JSON.parse(raw);
-        if (s && s.version === 1 && Array.isArray(s.fixtures) && Array.isArray(s.users) && Array.isArray(s.predictions)) {
+        if (s && s.version === 2 && Array.isArray(s.picks) && Array.isArray(s.fixtures) && Array.isArray(s.users) && Array.isArray(s.predictions)) {
           recompute(s);
           if (s.sessionUserId && !s.users.some(u => u.id === s.sessionUserId)) s.sessionUserId = null;
           return s;
@@ -133,27 +153,29 @@
 
   function fixtureCard(f, pred, user, interactive) {
     const done = f.home_score != null && f.away_score != null;
-    const live = isPast(f);
+    const live = isPast(f), cs = MK.list(f.markets).includes('CS');
+    const mine = {}; if (user) state.picks.filter(k => k.user_id === user.id && k.fixture_id === f.id).forEach(k => { mine[k.market] = k; });
+    const mk = interactive ? MK.render(f, mine, { open: !!user && !done && !live, action: '#', pts: state.settings.markets }).replace(/<form method="post" action="#"/g, `<form action="#" data-fid="${f.id}"`) : '';
     const action = done
       ? `<div class="result"><b>${f.home_score}</b><span>FT</span><b>${f.away_score}</b></div>`
       : `<div class="vs">${live ? '<span class="pill red pulse">Locked</span>' : '<span class="vs-txt">VS</span>'}</div>`;
     let form = '';
     if (interactive && !done && !live) {
-      form = user ? `<form class="predict" action="#" data-action="predict" data-id="${f.id}">
+      form = user ? (!cs ? '' : `<div class="mkt-h cs-h"><span>Correct Score</span><span class="mkt-pts">${state.settings.exact} pts</span></div><form class="predict" action="#" data-action="predict" data-id="${f.id}">
         <input type="number" name="home" min="0" max="99" inputmode="numeric" required value="${pred?.home_goals ?? ''}" aria-label="${esc(f.home_team)} goals">
         <span class="dash">–</span>
         <input type="number" name="away" min="0" max="99" inputmode="numeric" required value="${pred?.away_goals ?? ''}" aria-label="${esc(f.away_team)} goals">
         <button class="btn sm" type="submit">${pred ? 'Update' : 'Predict'}</button></form>
-        <div class="quick">${QUICK.map(s => `<button type="button" class="chip" data-q="${s}">${s}</button>`).join('')}</div>`
+        <div class="quick">${QUICK.map(s => `<button type="button" class="chip" data-q="${s}">${s}</button>`).join('')}</div>`)
         : `<a class="btn ghost sm block" href="#/login?next=/fixtures">Log in to predict</a>`;
     }
     const yours = !interactive ? '' : pred
-      ? `<div class="yours">Your pick <b>${pred.home_goals} – ${pred.away_goals}</b> ${done ? ptsPill(pred.points) : ''}</div>`
-      : (user && (live || done) ? '<div class="yours muted">No prediction made</div>' : '');
+      ? `<div class="yours">Correct score <b>${pred.home_goals} – ${pred.away_goals}</b> ${done ? ptsPill(pred.points) : ''}</div>`
+      : (user && (live || done) && !Object.keys(mine).length ? '<div class="yours muted">No prediction made</div>' : '');
     const countdown = !done && !live ? `<div class="countdown small muted" data-kick="${esc(f.kickoff)}"></div>` : '';
     return `<article class="card fixture" id="f${f.id}"><div class="meta"><span class="pill">${esc(f.competition)}</span>${ex(f)}<span class="muted small">${timeEl(f.kickoff)}${f.venue ? ' · ' + esc(f.venue) : ''}</span></div>
       <div class="teams"><div class="team">${badge(f.home_team, 'lg')}<span>${esc(f.home_team)}</span></div>${action}<div class="team">${badge(f.away_team, 'lg')}<span>${esc(f.away_team)}</span></div></div>
-      ${countdown}${form}${yours}</article>`;
+      ${done && f.ht_home != null ? `<div class="small muted center">HT ${f.ht_home} – ${f.ht_away}</div>` : ''}${countdown}${mk}${form}${yours}</article>`;
   }
 
   function homeView(user) {
@@ -167,7 +189,7 @@
       preds: state.predictions.length
     };
     return `<section class="hero"><span class="pill glow">Season is live</span><h1>Call the score.<br><span class="grad">Own the table.</span></h1>
-      <p class="lead muted">Predict every match, earn <b>${s.exact} pts</b> for an exact score and <b>${s.outcome} pt</b> for the right result. Bragging rights included.</p>
+      <p class="lead muted">Pick from match result, double chance, over/under, GG/NG and more on every match — or nail the correct score for <b>${s.exact} pts</b>. Points only, bragging rights included.</p>
       <div class="row gap wrapr">${user ? `<a class="btn lg" href="#/fixtures">Make predictions</a><a class="btn ghost lg" href="#/me">My picks</a>` : `<a class="btn lg" href="#/signup">Start predicting — free</a><a class="btn ghost lg" href="#/fixtures">Browse fixtures</a>`}</div>
       <div class="stats">${[['Fixtures', stats.fixtures], ['Players', stats.players], ['Predictions', stats.preds]].map(([l, v]) => `<div><b data-count="${v}">${v}</b><span>${l}</span></div>`).join('')}</div></section>
       <div class="grid2"><section><div class="sec-h"><h2>Up next</h2><a href="#/fixtures" class="link">All fixtures →</a></div>
@@ -190,7 +212,7 @@
     const list = lists[cur];
     const groups = Object.create(null);
     list.forEach(f => { (groups[f.competition] ||= []).push(f); });
-    return `<div class="page-h"><h1>Fixtures</h1><p class="muted">Predictions lock automatically at kickoff.</p></div>
+    return `<div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
       <div class="tabs">${tabs.map(([k, l, n]) => `<a href="#/fixtures?tab=${k}" class="${k === cur ? 'on' : ''}">${l} <span>${n}</span></a>`).join('')}</div>
       ${list.length ? Object.entries(groups).map(([c, rows]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${rows.map(f => fixtureCard(f, mine[f.id], user, true)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}`;
   }
@@ -203,13 +225,21 @@
     const lb = leaderboard(state);
     const me = lb.find(r => r.id === user.id);
     const rank = lb.findIndex(r => r.id === user.id) + 1;
-    const settled = rows.filter(r => r.points != null);
+    const kp = state.picks.filter(k => k.user_id === user.id);
+    const settled = rows.filter(r => r.points != null).concat(kp.filter(k => k.status && k.status !== 'void'));
+    const byF = {};
+    rows.forEach(r => (byF[r.fixture_id] ||= { f: r, items: [] }).items.push({ m: 'Correct score', sel: `${r.home_goals}–${r.away_goals}`, pts: r.points, st: r.points == null ? null : r.points > 0 ? 'won' : 'lost' }));
+    kp.forEach(k => { const f = state.fixtures.find(x => x.id === k.fixture_id); if (f) (byF[k.fixture_id] ||= { f, items: [] }).items.push({ m: MK.MARKETS[k.market]?.name || k.market, sel: MK.label(k.market, k.selection), pts: k.points, st: k.status }); });
+    const groups = Object.values(byF).sort((a, b) => Date.parse(b.f.kickoff) - Date.parse(a.f.kickoff));
+    const stPill = i => i.st == null ? '<span class="pill xs">Pending</span>' : i.st === 'void' ? '<span class="pill xs">Void</span>' : i.pts > 0 ? `<span class="pill green xs">+${i.pts}</span>` : '<span class="pill red xs">0</span>';
     const acc = settled.length ? Math.round(100 * settled.filter(r => r.points > 0).length / settled.length) : 0;
     return `<div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
       <div class="stats card"><div><b>${me?.pts ?? 0}</b><span>Points</span></div><div><b>${rank ? '#' + rank : '–'}</b><span>of ${lb.length}</span></div><div><b>${acc}%</b><span>Accuracy</span></div><div><b>${me?.exact ?? 0}</b><span>Exact scores</span></div></div>
       <div class="sec-h"><h2>Prediction history</h2></div>
-      ${rows.length ? `<div class="card list">${rows.map(r => `<div class="lrow hist"><div class="grow"><div class="small muted">${esc(r.competition)} · ${timeEl(r.kickoff)}</div><div class="row gap">${badge(r.home_team, 'sm')}<b>${esc(r.home_team)}</b><span class="muted">vs</span><b>${esc(r.away_team)}</b>${badge(r.away_team, 'sm')}</div></div>
-      <div class="right"><div class="small muted">Pick <b>${r.home_goals}–${r.away_goals}</b>${r.home_score != null ? ` · FT <b>${r.home_score}–${r.away_score}</b>` : ''}</div>${ptsPill(r.points)}</div></div>`).join('')}</div>`
+      ${groups.length ? `<div class="card list">${groups.map(({ f: r, items }) => { const tot = items.reduce((a, i) => a + (i.pts || 0), 0), pend = items.every(i => i.st == null);
+      return `<div class="lrow hist"><div class="grow"><div class="small muted">${esc(r.competition)} · ${timeEl(r.kickoff)}${r.home_score != null ? ` · FT <b>${r.home_score}–${r.away_score}</b>` : ''}</div><div class="row gap">${badge(r.home_team, 'sm')}<b>${esc(r.home_team)}</b><span class="muted">vs</span><b>${esc(r.away_team)}</b>${badge(r.away_team, 'sm')}</div>
+      <div class="picklist">${items.map(i => `<span class="pk"><span class="muted">${esc(i.m)}</span> <b>${esc(i.sel)}</b> ${stPill(i)}</span>`).join('')}</div></div>
+      <div class="right">${ptsPill(pend ? null : tot)}</div></div>`; }).join('')}</div>`
       : empty('🎯', 'No predictions yet', 'Pick a fixture and call the score.', '<a class="btn" href="#/fixtures">Go to fixtures</a>')}`;
   }
 
@@ -217,9 +247,9 @@
     const s = state.settings;
     const rows = leaderboard(state);
     const pod = rows.slice(0, 3);
-    return `<div class="page-h"><h1>Leaderboard</h1><p class="muted">${s.exact} pts exact score · ${s.outcome} pt correct result</p></div>
+    return `<div class="page-h"><h1>Leaderboard</h1><p class="muted">Points from every market you pick · ${s.exact} pts for an exact score</p></div>
       ${rows.length ? `<div class="podium">${[1, 0, 2].filter(i => pod[i]).map(i => `<div class="pod p${i + 1}">${badge(pod[i].name, 'xl')}<b>${esc(pod[i].name)}</b><span class="pts">${pod[i].pts} pts</span><div class="step">${i + 1}</div></div>`).join('')}</div>
-      <div class="card list">${rows.map((r, i) => `<div class="lrow ${user?.id === r.id ? 'me' : ''}"><span class="rank r${i + 1}">${i + 1}</span>${badge(r.name)}<span class="grow">${esc(r.name)}${user?.id === r.id ? ' <span class="pill green">You</span>' : ''}</span><span class="muted small hide-sm">${r.exact} exact · ${r.played} settled</span><b>${r.pts}</b></div>`).join('')}</div>`
+      <div class="card list">${rows.map((r, i) => `<div class="lrow ${user?.id === r.id ? 'me' : ''}"><span class="rank r${i + 1}">${i + 1}</span>${badge(r.name)}<span class="grow">${esc(r.name)}${user?.id === r.id ? ' <span class="pill green">You</span>' : ''}</span><span class="muted small hide-sm">${r.won} won · ${r.exact} exact · ${r.played} settled</span><b>${r.pts}</b></div>`).join('')}</div>`
       : empty('🏆', 'The table is empty', 'Sign up and make predictions to get on the board.', '<a class="btn" href="#/signup">Join now</a>')}`;
   }
 
@@ -238,7 +268,8 @@
     if (!home_team || !away_team || !competition || !local) return null;
     const kickoffDate = new Date(local);
     if (isNaN(kickoffDate)) return null;
-    return { home_team, away_team, competition, venue, kickoff: kickoffDate.toISOString() };
+    const markets = MK.list([...form.querySelectorAll('input[name=markets]:checked')].map(i => i.value).join(',')).join(',');
+    return { home_team, away_team, competition, venue, markets, kickoff: kickoffDate.toISOString() };
   }
 
   function adminView(editId) {
@@ -252,18 +283,20 @@
       <div class="grid-2"><label>Home team<input name="home_team" required value="${v('home_team')}" placeholder="e.g. Arsenal"></label><label>Away team<input name="away_team" required value="${v('away_team')}" placeholder="e.g. Chelsea"></label></div>
       <div class="grid-2"><label>Competition<input name="competition" required value="${v('competition')}" placeholder="e.g. Premier League" list="comps"></label><label>Kickoff (your local time)<input type="datetime-local" name="kickoff" required value="${edit ? esc(toLocalInput(edit.kickoff)) : ''}"></label></div>
       <label>Venue <span class="muted">(optional)</span><input name="venue" value="${v('venue')}" placeholder="e.g. Emirates Stadium"></label>
+      <fieldset class="mkt-pick"><legend>Markets players can pick</legend>${MK.ORDER.map(k => `<label class="chk"><input type="checkbox" name="markets" value="${k}" ${MK.list(edit?.markets).includes(k) ? 'checked' : ''}><span>${esc(MK.MARKETS[k].name)}</span></label>`).join('')}</fieldset>
       <datalist id="comps">${comps.map(c => `<option value="${esc(c)}">`).join('')}</datalist>
       <div class="row gap"><button class="btn" type="submit">${edit ? 'Save changes' : 'Add fixture'}</button>${edit ? '<a class="btn ghost" href="#/admin">Cancel</a>' : ''}</div></form>`;
     const row = f => {
-      const n = state.predictions.filter(p => p.fixture_id === f.id).length;
+      const n = state.predictions.filter(p => p.fixture_id === f.id).length + state.picks.filter(k => k.fixture_id === f.id).length;
+      const ht = MK.list(f.markets).includes('HT1X2');
       const scored = f.home_score != null;
-      return `<div class="lrow admin-row"><div class="grow"><div class="small muted">${esc(f.competition)} · ${timeEl(f.kickoff)} ${ex(f)}</div><div class="row gap">${badge(f.home_team, 'sm')}<b>${esc(f.home_team)}</b><span class="muted">vs</span><b>${esc(f.away_team)}</b>${badge(f.away_team, 'sm')}</div><div class="small muted">${n} prediction${n === 1 ? '' : 's'}</div></div>
-        <form action="#" class="predict tight" data-action="result" data-id="${f.id}"><input type="number" name="home_score" min="0" max="99" value="${f.home_score ?? ''}" aria-label="Home score"><span class="dash">–</span><input type="number" name="away_score" min="0" max="99" value="${f.away_score ?? ''}" aria-label="Away score"><button class="btn sm ${scored ? 'ghost' : ''}" type="submit">${scored ? 'Update' : 'Set result'}</button></form>
+      return `<div class="lrow admin-row"><div class="grow"><div class="small muted">${esc(f.competition)} · ${timeEl(f.kickoff)} ${ex(f)}</div><div class="row gap">${badge(f.home_team, 'sm')}<b>${esc(f.home_team)}</b><span class="muted">vs</span><b>${esc(f.away_team)}</b>${badge(f.away_team, 'sm')}</div><div class="small muted">${n} pick${n === 1 ? '' : 's'} · ${MK.list(f.markets).map(k => MK.MARKETS[k].short).join(' · ')}</div></div>
+        <form action="#" class="predict tight${ht ? ' ht' : ''}" data-action="result" data-id="${f.id}"><input type="number" name="home_score" min="0" max="99" value="${f.home_score ?? ''}" aria-label="Home score"><span class="dash">–</span><input type="number" name="away_score" min="0" max="99" value="${f.away_score ?? ''}" aria-label="Away score">${ht ? `<span class="small muted">HT</span><input type="number" name="ht_home" min="0" max="99" value="${f.ht_home ?? ''}" aria-label="Half-time home"><span class="dash">–</span><input type="number" name="ht_away" min="0" max="99" value="${f.ht_away ?? ''}" aria-label="Half-time away">` : ''}<button class="btn sm ${scored ? 'ghost' : ''}" type="submit">${scored ? 'Update' : 'Set result'}</button></form>
         <div class="row gap"><a class="icon-btn" href="#/admin?edit=${f.id}" title="Edit">✎</a>${scored ? `<form action="#" data-action="clear-result" data-id="${f.id}"><button class="icon-btn" type="submit" title="Clear result">↺</button></form>` : ''}<form action="#" data-action="delete-fixture" data-id="${f.id}" data-confirm="Delete this fixture and its predictions?"><button class="icon-btn danger" type="submit" title="Delete">🗑</button></form></div></div>`;
     };
     return `<div class="page-h row between wrapr" id="top"><div><h1>Admin</h1><p class="muted">Manage fixtures, results and scoring.</p></div><a class="btn ghost" href="#/admin/users">Users (${state.users.length})</a></div>
       <div class="grid2 admin-grid"><div>${form}
-      <form action="#" method="post" class="card stack" data-action="save-settings"><h3>Scoring rules</h3><div class="grid-2"><label>Exact score<input type="number" name="points_exact" min="0" max="99" value="${s.exact}"></label><label>Correct outcome<input type="number" name="points_outcome" min="0" max="99" value="${s.outcome}"></label></div><button class="btn ghost" type="submit">Save & recalculate</button></form></div>
+      <form action="#" method="post" class="card stack" data-action="save-settings"><h3>Scoring rules</h3><p class="muted small" style="margin:0">Points awarded when a pick wins. Draw No Bet is void (0) on a draw.</p><div class="grid-3">${Object.keys(s.markets).map(k => `<label>${esc(MK.MARKETS[k].name)}<input type="number" name="pts_${k}" min="0" max="99" value="${s.markets[k]}"></label>`).join('')}<label>Correct score — exact<input type="number" name="points_exact" min="0" max="99" value="${s.exact}"></label><label>Correct score — right result<input type="number" name="points_outcome" min="0" max="99" value="${s.outcome}"></label></div><button class="btn ghost" type="submit">Save & recalculate</button></form></div>
       <div><div class="sec-h"><h2>All fixtures</h2><span class="muted small">${fx.length} total</span></div>${fx.length ? `<div class="card list">${fx.map(row).join('')}</div>` : empty('📋', 'No fixtures yet', 'Add your first fixture using the form.')}</div></div>`;
   }
 
@@ -377,6 +410,7 @@
     const f = state.fixtures.find(x => x.id === +form.dataset.id);
     if (!user || !f) return;
     if (isPast(f)) { setFlash('error', 'Predictions are locked — this match has kicked off.'); render(); return; }
+    if (!MK.list(f.markets).includes('CS')) { setFlash('error', 'Correct Score is not open for this match.'); render(); return; }
     const h = intOrNull(form.home.value), a = intOrNull(form.away.value);
     if (h == null || a == null) { setFlash('error', 'Enter a valid score (0–99).'); render(); return; }
     let p = state.predictions.find(x => x.user_id === user.id && x.fixture_id === f.id);
@@ -394,7 +428,7 @@
       const f = state.fixtures.find(x => x.id === id);
       if (!f) return;
       Object.assign(f, data);
-      save();
+      recompute(state); save();
       setFlash('success', 'Fixture updated.');
       go('#/admin');
     } else {
@@ -409,7 +443,10 @@
     if (!f) return;
     const h = intOrNull(form.home_score.value), a = intOrNull(form.away_score.value);
     if (h == null || a == null) { setFlash('error', 'Enter both scores.'); render(); return; }
-    f.home_score = h; f.away_score = a;
+    const hh = form.ht_home ? intOrNull(form.ht_home.value) : null, ha = form.ht_away ? intOrNull(form.ht_away.value) : null;
+    const ht = hh != null && ha != null;
+    if (ht && (hh > h || ha > a)) { setFlash('error', 'Half-time goals cannot exceed full-time goals.'); render(); return; }
+    f.home_score = h; f.away_score = a; f.ht_home = ht ? hh : null; f.ht_away = ht ? ha : null;
     recompute(state); save();
     setFlash('success', 'Result saved — points updated.');
     render();
@@ -417,7 +454,7 @@
   function onClear(form) {
     const f = state.fixtures.find(x => x.id === +form.dataset.id);
     if (!f) return;
-    f.home_score = null; f.away_score = null;
+    f.home_score = null; f.away_score = null; f.ht_home = null; f.ht_away = null;
     recompute(state); save();
     setFlash('success', 'Result cleared.');
     render();
@@ -426,6 +463,7 @@
     const id = +form.dataset.id;
     state.fixtures = state.fixtures.filter(f => f.id !== id);
     state.predictions = state.predictions.filter(p => p.fixture_id !== id);
+    state.picks = state.picks.filter(k => k.fixture_id !== id);
     save();
     setFlash('success', 'Fixture deleted.');
     render();
@@ -433,7 +471,9 @@
   function onSettings(form) {
     const exact = intOrNull(form.points_exact.value), outcome = intOrNull(form.points_outcome.value);
     if (exact == null || outcome == null) { setFlash('error', 'Points must be whole numbers.'); render(); return; }
-    state.settings = { exact, outcome };
+    const markets = {};
+    for (const k of Object.keys(state.settings.markets)) { markets[k] = intOrNull(form['pts_' + k].value); if (markets[k] == null) { setFlash('error', 'Points must be whole numbers.'); render(); return; } }
+    state.settings = { exact, outcome, markets };
     recompute(state); save();
     setFlash('success', 'Scoring updated and all points recalculated.');
     render();
@@ -482,6 +522,24 @@
       const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
       document.documentElement.dataset.theme = t;
       try { localStorage.theme = t; } catch (err) { /* ignore */ }
+      return;
+    }
+    const opt = e.target.closest('.mkt .opt');
+    if (opt) {
+      e.preventDefault();
+      const form = opt.closest('form'), user = currentUser();
+      const f = state.fixtures.find(x => x.id === +form.dataset.fid);
+      if (!f || !user || opt.disabled) return;
+      if (isPast(f) || f.home_score != null) { setFlash('error', 'Picks are locked — this match has kicked off.'); render(); return; }
+      const market = form.market.value, sel = opt.value;
+      if (!MK.list(f.markets).includes(market) || !MK.valid(market, sel)) return;
+      const cur = state.picks.find(k => k.user_id === user.id && k.fixture_id === f.id && k.market === market);
+      let selected = sel;
+      if (cur && cur.selection === sel) { state.picks = state.picks.filter(k => k !== cur); selected = null; }
+      else if (cur) cur.selection = sel;
+      else state.picks.push({ id: state.nextId++, user_id: user.id, fixture_id: f.id, market, selection: sel, status: null, points: null });
+      save();
+      form.querySelectorAll('.opt').forEach(o => { const on = o.value === selected; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
       return;
     }
     const chip = e.target.closest('.chip');

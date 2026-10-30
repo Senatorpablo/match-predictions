@@ -11,5 +11,14 @@
     f.addEventListener('submit', () => { f.kickoff_iso.value = new Date(i.value).toISOString(); }); });
   $('form[data-confirm]').forEach(f => f.addEventListener('submit', e => { if (!confirm(f.dataset.confirm)) e.preventDefault(); }));
   $('[data-count]').forEach(el => { const n = +el.dataset.count, t0 = performance.now(); const step = t => { const p = Math.min(1, (t - t0) / 700); el.textContent = Math.round(n * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); });
+  // One-tap market picks without a page reload (falls back to normal form post).
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.mkt .opt'); if (!b || b.disabled || !window.fetch) return;
+    e.preventDefault(); const form = b.closest('form'); b.classList.add('busy');
+    fetch(form.action, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, credentials: 'same-origin',
+      body: new URLSearchParams({ market: form.market.value, selection: b.value }) })
+      .then(r => r.json()).then(j => { if (!j.ok) throw new Error(j.error); form.querySelectorAll('.opt').forEach(o => { const on = o.value === j.selection; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); }); })
+      .catch(err => alert(err.message || 'Could not save your pick.')).finally(() => b.classList.remove('busy'));
+  });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 })();

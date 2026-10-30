@@ -4,12 +4,6 @@ A clean, mobile-first match-prediction website that also installs as a phone app
 
 **Stack:** Node.js 18+ (tested on Node 24), Express, SQLite (better-sqlite3), server-rendered HTML, vanilla JS. No paid services.
 
-## Live demo
-
-GitHub Pages serves a static clickable demo from `docs/` on `main` (example data, stored only in your browser):
-
-https://senatorpablo.github.io/match-predictions/
-
 ## Run it
 ```bash
 npm install
@@ -47,3 +41,13 @@ To remove the demo data, delete the fixtures marked "Example" in Admin. For a cl
 
 ## Hosting
 Any Node host with a persistent disk works: Render (add a Disk), Railway or Fly.io (volume), or a small VPS with Caddy or Nginx for HTTPS plus pm2/systemd. Set `DB_PATH` on the volume, and set `SESSION_SECRET` and `NODE_ENV=production`.
+
+## Markets (bookmaker-style picks, points only)
+Each fixture can offer several markets; the admin ticks which ones when adding/editing a fixture
+(default: Match Result 1X2, Double Chance, Over/Under 2.5, Both Teams To Score, Correct Score).
+Available: 1X2, Double Chance (1X/12/X2), Over/Under 0.5/1.5/2.5/3.5, GG/NG, Draw No Bet (void on a draw),
+1st Half Result (admin enters the HT score), Correct Score. Entering the final score settles every market automatically.
+Points per market are set in Admin → Scoring rules (defaults 1X2=2, DC=1, O/U=1, GG/NG=1, DNB=1, HT=2, exact score=5).
+No odds and no money — it's a points game. Market logic lives in `public/markets.js` (shared with the static demo in `docs/`).
+Existing databases are migrated automatically on start (new `picks` table and `markets`/`ht_*` columns; old score predictions keep working).
+Run `npm test` for the smoke test.

@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { db, settings, set, ensureAdmin, recompute, recomputeAll } = require('./db');
 const V = require('./views');
+const M = require('./public/markets.js');
 
 ensureAdmin();
 const secretFile = path.join(__dirname, 'data', '.session-secret');
@@ -28,9 +29,13 @@ const admin = (req, res, next) => req.user?.is_admin ? next() : (req.user ? res.
 const locked = f => Date.now() >= Date.parse(f.kickoff);
 const int = v => { const n = parseInt(v, 10); return Number.isInteger(n) && n >= 0 && n <= 99 ? n : null; };
 
-const leaderboard = () => db.prepare(`SELECT u.id,u.name,COALESCE(SUM(p.points),0) pts,COUNT(p.points) played,
-  SUM(CASE WHEN p.points=(SELECT value FROM settings WHERE key='points_exact') AND p.points>0 THEN 1 ELSE 0 END) exact
-  FROM users u LEFT JOIN predictions p ON p.user_id=u.id WHERE u.is_admin=0 GROUP BY u.id ORDER BY pts DESC, exact DESC, u.name`).all();
+const leaderboard = () => db.prepare(`SELECT u.id,u.name,
+  COALESCE((SELECT SUM(points) FROM predictions WHERE user_id=u.id),0)+COALESCE((SELECT SUM(points) FROM picks WHERE user_id=u.id),0) pts,
+  (SELECT COUNT(points) FROM predictions WHERE user_id=u.id)+(SELECT COUNT(status) FROM picks WHERE user_id=u.id) played,
+  (SELECT COUNT(*) FROM picks WHERE user_id=u.id AND status='won')+(SELECT COUNT(*) FROM predictions p JOIN fixtures f ON f.id=p.fixture_id WHERE p.user_id=u.id AND p.home_goals=f.home_score AND p.away_goals=f.away_score) won,
+  (SELECT COUNT(*) FROM predictions p JOIN fixtures f ON f.id=p.fixture_id WHERE p.user_id=u.id AND p.home_goals=f.home_score AND p.away_goals=f.away_score) exact
+  FROM users u WHERE u.is_admin=0 ORDER BY pts DESC, exact DESC, won DESC, u.name`).all();
+const picksFor = uid => { const o = {}; if (uid) for (const k of db.prepare('SELECT * FROM picks WHERE user_id=?').all(uid)) (o[k.fixture_id] ||= {})[k.market] = k; return o; };
 
 app.get('/', (req, res) => {
   const upcoming = db.prepare(`SELECT * FROM fixtures WHERE kickoff > ? ORDER BY kickoff LIMIT 3`).all(new Date().toISOString());
@@ -42,13 +47,14 @@ app.get('/', (req, res) => {
 app.get('/fixtures', (req, res) => {
   const fx = db.prepare('SELECT * FROM fixtures ORDER BY kickoff').all();
   const mine = req.user ? Object.fromEntries(db.prepare('SELECT * FROM predictions WHERE user_id=?').all(req.user.id).map(p => [p.fixture_id, p])) : {};
-  res.page('Fixtures', V.fixtures({ fx, mine, user: req.user, tab: req.query.tab || 'upcoming' }), { active: 'fixtures' });
+  res.page('Fixtures', V.fixtures({ fx, mine, picks: picksFor(req.user?.id), user: req.user, tab: req.query.tab || 'upcoming', s: settings() }), { active: 'fixtures' });
 });
 
 app.post('/predict/:id', auth, (req, res) => {
   const f = db.prepare('SELECT * FROM fixtures WHERE id=?').get(req.params.id);
   if (!f) return res.status(404).page('Not found', V.empty('🤷', 'Fixture not found', ''));
   if (locked(f)) { flash(req, 'error', 'Predictions are locked — this match has kicked off.'); return res.status(423).redirect('/fixtures'); }
+  if (!M.list(f.markets).includes('CS')) { flash(req, 'error', 'Correct Score is not open for this match.'); return res.redirect('/fixtures'); }
   const h = int(req.body.home), a = int(req.body.away);
   if (h == null || a == null) { flash(req, 'error', 'Enter a valid score (0–99).'); return res.redirect('/fixtures'); }
   db.prepare(`INSERT INTO predictions(user_id,fixture_id,home_goals,away_goals) VALUES(?,?,?,?)
@@ -57,10 +63,29 @@ app.post('/predict/:id', auth, (req, res) => {
   res.redirect('/fixtures#f' + f.id);
 });
 
+// One-tap market picks (1X2, DC, O/U, GG/NG, DNB, HT). Tapping the same option again removes it.
+app.post('/pick/:id', auth, (req, res) => {
+  const json = (req.get('accept') || '').includes('application/json');
+  const fail = (code, msg) => json ? res.status(code).json({ ok: false, error: msg }) : (flash(req, 'error', msg), res.redirect('/fixtures'));
+  const f = db.prepare('SELECT * FROM fixtures WHERE id=?').get(req.params.id);
+  if (!f) return fail(404, 'Fixture not found.');
+  if (locked(f) || f.home_score != null) return fail(423, 'Picks are locked — this match has kicked off.');
+  const m = String(req.body.market || ''), sel = String(req.body.selection || '');
+  if (!M.list(f.markets).includes(m) || !M.valid(m, sel)) return fail(400, 'That option is not available for this match.');
+  const cur = db.prepare('SELECT * FROM picks WHERE user_id=? AND fixture_id=? AND market=?').get(req.user.id, f.id, m);
+  let selected = sel;
+  if (cur && cur.selection === sel) { db.prepare('DELETE FROM picks WHERE id=?').run(cur.id); selected = null; }
+  else db.prepare(`INSERT INTO picks(user_id,fixture_id,market,selection) VALUES(?,?,?,?) ON CONFLICT(user_id,fixture_id,market) DO UPDATE SET selection=excluded.selection,updated_at=CURRENT_TIMESTAMP`).run(req.user.id, f.id, m, sel);
+  if (json) return res.json({ ok: true, market: m, selection: selected });
+  flash(req, 'success', selected ? `Picked ${M.MARKETS[m].name}: ${M.label(m, sel)}` : 'Pick removed.');
+  res.redirect('/fixtures#f' + f.id);
+});
+
 app.get('/me', auth, (req, res) => {
   const rows = db.prepare(`SELECT p.*,f.home_team,f.away_team,f.competition,f.kickoff,f.home_score,f.away_score FROM predictions p JOIN fixtures f ON f.id=p.fixture_id WHERE p.user_id=? ORDER BY f.kickoff DESC`).all(req.user.id);
   const lb = leaderboard(); const rank = lb.findIndex(r => r.id === req.user.id) + 1;
-  res.page('My predictions', V.me({ user: req.user, rows, rank, total: lb.length, me: lb.find(r => r.id === req.user.id) }), { active: 'me' });
+  const picks = db.prepare(`SELECT k.*,f.home_team,f.away_team,f.competition,f.kickoff,f.home_score,f.away_score FROM picks k JOIN fixtures f ON f.id=k.fixture_id WHERE k.user_id=? ORDER BY f.kickoff DESC`).all(req.user.id);
+  res.page('My predictions', V.me({ user: req.user, rows, picks, rank, total: lb.length, me: lb.find(r => r.id === req.user.id) }), { active: 'me' });
 });
 
 app.get('/leaderboard', (req, res) => res.page('Leaderboard', V.leaderboard({ rows: leaderboard(), user: req.user, s: settings() }), { active: 'leaderboard' }));
@@ -85,40 +110,44 @@ app.post('/logout', (req, res) => { req.session = null; res.redirect('/'); });
 
 // ---- Admin ----
 app.get('/admin', admin, (req, res) => {
-  const fx = db.prepare(`SELECT f.*,(SELECT COUNT(*) FROM predictions p WHERE p.fixture_id=f.id) n FROM fixtures f ORDER BY kickoff DESC`).all();
+  const fx = db.prepare(`SELECT f.*,(SELECT COUNT(*) FROM predictions p WHERE p.fixture_id=f.id)+(SELECT COUNT(*) FROM picks k WHERE k.fixture_id=f.id) n FROM fixtures f ORDER BY kickoff DESC`).all();
   const edit = req.query.edit ? db.prepare('SELECT * FROM fixtures WHERE id=?').get(req.query.edit) : null;
   res.page('Admin', V.admin({ fx, edit, s: settings(), counts: { users: db.prepare('SELECT COUNT(*) c FROM users').get().c } }), { active: 'admin' });
 });
 function readFixture(b) {
-  const f = { home_team: String(b.home_team || '').trim(), away_team: String(b.away_team || '').trim(), competition: String(b.competition || '').trim(), venue: String(b.venue || '').trim() || null, kickoff: b.kickoff_iso || b.kickoff };
+  const f = { home_team: String(b.home_team || '').trim(), away_team: String(b.away_team || '').trim(), competition: String(b.competition || '').trim(), venue: String(b.venue || '').trim() || null, kickoff: b.kickoff_iso || b.kickoff, markets: M.list([].concat(b.markets || []).join(',')).join(',') };
   const t = Date.parse(f.kickoff);
   if (!f.home_team || !f.away_team || !f.competition || isNaN(t)) return null;
   f.kickoff = new Date(t).toISOString(); return f;
 }
 app.post('/admin/fixtures', admin, (req, res) => {
   const f = readFixture(req.body); if (!f) { flash(req, 'error', 'Home team, away team, competition and kickoff are required.'); return res.redirect('/admin'); }
-  db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue) VALUES(@home_team,@away_team,@competition,@kickoff,@venue)').run(f);
+  db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,markets) VALUES(@home_team,@away_team,@competition,@kickoff,@venue,@markets)').run(f);
   flash(req, 'success', `Fixture added: ${f.home_team} vs ${f.away_team}`); res.redirect('/admin');
 });
 app.post('/admin/fixtures/:id', admin, (req, res) => {
   const f = readFixture(req.body); if (!f) { flash(req, 'error', 'All required fields must be filled.'); return res.redirect('/admin?edit=' + req.params.id); }
-  db.prepare('UPDATE fixtures SET home_team=@home_team,away_team=@away_team,competition=@competition,kickoff=@kickoff,venue=@venue WHERE id=@id').run({ ...f, id: req.params.id });
+  db.prepare('UPDATE fixtures SET home_team=@home_team,away_team=@away_team,competition=@competition,kickoff=@kickoff,venue=@venue,markets=@markets WHERE id=@id').run({ ...f, id: req.params.id });
+  recompute(req.params.id);
   flash(req, 'success', 'Fixture updated.'); res.redirect('/admin');
 });
 app.post('/admin/fixtures/:id/delete', admin, (req, res) => { db.prepare('DELETE FROM fixtures WHERE id=?').run(req.params.id); flash(req, 'success', 'Fixture deleted.'); res.redirect('/admin'); });
 app.post('/admin/fixtures/:id/result', admin, (req, res) => {
   const clear = req.body.clear === '1'; const h = int(req.body.home_score), a = int(req.body.away_score);
   if (!clear && (h == null || a == null)) { flash(req, 'error', 'Enter both scores.'); return res.redirect('/admin'); }
-  db.prepare('UPDATE fixtures SET home_score=?,away_score=? WHERE id=?').run(clear ? null : h, clear ? null : a, req.params.id);
+  const hh = int(req.body.ht_home), ha = int(req.body.ht_away), ht = !clear && hh != null && ha != null;
+  if (ht && (hh > h || ha > a)) { flash(req, 'error', 'Half-time goals cannot exceed full-time goals.'); return res.redirect('/admin'); }
+  db.prepare('UPDATE fixtures SET home_score=?,away_score=?,ht_home=?,ht_away=? WHERE id=?').run(clear ? null : h, clear ? null : a, ht ? hh : null, ht ? ha : null, req.params.id);
   recompute(req.params.id); flash(req, 'success', clear ? 'Result cleared.' : 'Result saved — points updated.'); res.redirect('/admin');
 });
 app.post('/admin/settings', admin, (req, res) => {
   const e = int(req.body.points_exact), o = int(req.body.points_outcome);
   if (e == null || o == null) { flash(req, 'error', 'Points must be whole numbers.'); return res.redirect('/admin'); }
-  set('points_exact', e); set('points_outcome', o); recomputeAll(); flash(req, 'success', 'Scoring updated and all points recalculated.'); res.redirect('/admin');
+  const mk = {}; for (const k of Object.keys(settings().markets)) { mk[k] = int(req.body['pts_' + k]); if (mk[k] == null) { flash(req, 'error', 'Points must be whole numbers.'); return res.redirect('/admin'); } }
+  set('points_exact', e); set('points_outcome', o); for (const k in mk) set('pts_' + k, mk[k]); recomputeAll(); flash(req, 'success', 'Scoring updated and all points recalculated.'); res.redirect('/admin');
 });
 app.get('/admin/users', admin, (req, res) => {
-  const users = db.prepare(`SELECT u.*,COUNT(p.id) n,COALESCE(SUM(p.points),0) pts FROM users u LEFT JOIN predictions p ON p.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC`).all();
+  const users = db.prepare(`SELECT u.*,COUNT(p.id) n,COALESCE(SUM(p.points),0)+COALESCE((SELECT SUM(points) FROM picks WHERE user_id=u.id),0) pts FROM users u LEFT JOIN predictions p ON p.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC`).all();
   res.page('Users', V.users({ users, me: req.user }), { active: 'admin' });
 });
 app.post('/admin/users/:id/toggle-admin', admin, (req, res) => {
@@ -128,5 +157,6 @@ app.post('/admin/users/:id/toggle-admin', admin, (req, res) => {
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 app.use((req, res) => res.status(404).page('Not found', V.empty('🧭', 'Page not found', 'That page wandered offside.', '<a class="btn" href="/">Back home</a>')));
 
+module.exports = app;
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Matchday Predictions running on http://localhost:${PORT}`));
+if (require.main === module) app.listen(PORT, () => console.log(`Matchday Predictions running on http://localhost:${PORT}`));
