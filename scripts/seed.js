@@ -1,4 +1,4 @@
-// Seeds EXAMPLE fixtures (clearly labelled) + a few demo users/predictions. Safe to re-run.
+// Seeds EXAMPLE fixtures (clearly labelled) + a few demo users and market picks. Safe to re-run.
 const bcrypt = require('bcryptjs');
 const { db, ensureAdmin, recompute } = require('../db');
 ensureAdmin();
@@ -16,16 +16,13 @@ const fx = [
   ['Atlético Madrid','Sevilla','La Liga',5,20,'Metropolitano'],
   ['Juventus','Napoli','Serie A',8,19,'Allianz Stadium'],
 ];
-const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2,CS', DEF = '1X2,DC,OU25,BTTS,CS';
-const mk = i => [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB,CS', DEF, '1X2,OU25,BTTS,CS', DEF][i];
+const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2', DEF = '1X2,DC,OU25,BTTS';
+const mk = i => [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB', DEF, '1X2,OU25,BTTS', DEF][i];
 const ins = db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,home_score,away_score,ht_home,ht_away,markets,is_example) VALUES(?,?,?,?,?,?,?,?,?,?,1)');
 const ids = fx.map((f, i) => ins.run(f[0], f[1], f[2], iso(f[3], f[4]), f[5], f[6] ?? null, f[7] ?? null, f[8] ?? null, f[9] ?? null, mk(i)).lastInsertRowid);
 const users = [['Tunde (demo)','tunde@example.com'],['Amara (demo)','amara@example.com'],['Chris (demo)','chris@example.com']];
 const pw = bcrypt.hashSync('demo1234', 10);
 const uids = users.map(([n, e]) => db.prepare('INSERT OR IGNORE INTO users(name,email,password_hash) VALUES(?,?,?)').run(n, e, pw) && db.prepare('SELECT id FROM users WHERE email=?').get(e).id);
-const picks = [[[2,1],[1,1],[2,0]],[[1,0],[2,1],[3,0]],[[0,2],[1,1],[1,1]]];
-const pi = db.prepare('INSERT OR IGNORE INTO predictions(user_id,fixture_id,home_goals,away_goals) VALUES(?,?,?,?)');
-uids.forEach((u, i) => picks[i].forEach(([h, a], j) => pi.run(u, ids[j], h, a)));
 // Market picks: [fixtureIndex, market, selection] per demo user
 const mp = [
   [[0,'1X2','1'],[0,'OU25','O'],[0,'BTTS','Y'],[1,'DNB','1'],[1,'DC','X2'],[1,'HT1X2','X'],[2,'1X2','1'],[2,'BTTS','N'],[3,'1X2','X'],[3,'OU25','O']],

@@ -1,8 +1,7 @@
 /* Static Matchday demo. State lives in localStorage. All links are relative or in-page hashes. */
 (() => {
-  const KEY = 'matchday-demo-v2';
+  const KEY = 'matchday-demo-v3';
   const MK = window.Markets;
-  const QUICK = ['1-0', '2-1', '1-1', '0-0', '1-2', '0-1'];
   const ICONS = { home: '⌂', fixtures: '⚽', leaderboard: '🏆', me: '★', admin: '⚙' };
   const PATHS = ['/', '/fixtures', '/me', '/leaderboard', '/admin', '/admin/users', '/login', '/signup'];
 
@@ -21,41 +20,24 @@
     const n = Number(s);
     return n <= 99 ? n : null;
   };
-  const sign = n => Math.sign(n);
-
-  function scoreOf(p, f, s) {
-    if (f.home_score == null || f.away_score == null) return null;
-    if (p.home_goals === f.home_score && p.away_goals === f.away_score) return s.exact;
-    if (sign(p.home_goals - p.away_goals) === sign(f.home_score - f.away_score)) return s.outcome;
-    return 0;
-  }
   function recompute(s) {
-    for (const p of s.predictions) {
-      const f = s.fixtures.find(x => x.id === p.fixture_id);
-      p.points = f ? scoreOf(p, f, s.settings) : null;
-    }
     for (const k of s.picks) {
       const f = s.fixtures.find(x => x.id === k.fixture_id);
       const r = f ? MK.settle(k.market, k.selection, f, s.settings.markets) : { status: null, points: null };
       k.status = r.status; k.points = r.points;
     }
   }
-  const exactHit = (p, s) => { const f = s.fixtures.find(x => x.id === p.fixture_id); return f && f.home_score === p.home_goals && f.away_score === p.away_goals; };
   function leaderboard(s) {
     return s.users.filter(u => !u.is_admin).map(u => {
-      const mine = s.predictions.filter(p => p.user_id === u.id);
-      const settled = mine.filter(p => p.points != null);
-      const kp = s.picks.filter(k => k.user_id === u.id && k.status);
-      const exact = settled.filter(p => exactHit(p, s)).length;
+      const kp = s.picks.filter(k => k.user_id === u.id && k.status && MK.MARKETS[k.market]);
       return {
         id: u.id,
         name: u.name,
-        pts: settled.reduce((a, p) => a + p.points, 0) + kp.reduce((a, k) => a + (k.points || 0), 0),
-        played: settled.length + kp.length,
-        won: kp.filter(k => k.status === 'won').length + exact,
-        exact
+        pts: kp.reduce((a, k) => a + (k.points || 0), 0),
+        played: kp.length,
+        won: kp.filter(k => k.status === 'won').length
       };
-    }).sort((a, b) => b.pts - a.pts || b.exact - a.exact || b.won - a.won || a.name.localeCompare(b.name));
+    }).sort((a, b) => b.pts - a.pts || b.won - a.won || a.name.localeCompare(b.name));
   }
   function byKick(dir = 1) {
     return (a, b) => (Date.parse(a.kickoff) - Date.parse(b.kickoff)) * dir;
@@ -76,8 +58,8 @@
       ['Juventus', 'Napoli', 'Serie A', 8, 19, 'Allianz Stadium']
     ];
     const created = new Date(now).toISOString();
-    const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2,CS', DEF = MK.DEFAULT.join(',');
-    const MKS = [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB,CS', DEF, '1X2,OU25,BTTS,CS', DEF];
+    const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2', DEF = MK.DEFAULT.join(',');
+    const MKS = [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB', DEF, '1X2,OU25,BTTS', DEF];
     const fixtures = fx.map((f, i) => ({
       id: i + 1, home_team: f[0], away_team: f[1], competition: f[2], kickoff: iso(f[3], f[4]),
       venue: f[5], home_score: f[6] ?? null, away_score: f[7] ?? null, ht_home: f[8] ?? null, ht_away: f[9] ?? null, markets: MKS[i], is_example: 1, created_at: created
@@ -88,21 +70,16 @@
       { id: 3, name: 'Amara (demo)', email: 'amara@example.com', password: 'demo1234', is_admin: 0, example: 1, created_at: created },
       { id: 4, name: 'Chris (demo)', email: 'chris@example.com', password: 'demo1234', is_admin: 0, example: 1, created_at: created }
     ];
-    const picks = [[[2, 1], [1, 1], [2, 0]], [[1, 0], [2, 1], [3, 0]], [[0, 2], [1, 1], [1, 1]]];
-    const predictions = [];
-    let pid = 1;
-    users.slice(1).forEach((u, i) => picks[i].forEach(([h, a], j) => {
-      predictions.push({ id: pid++, user_id: u.id, fixture_id: fixtures[j].id, home_goals: h, away_goals: a, points: null });
-    }));
     const mp = [
       [[0, '1X2', '1'], [0, 'OU25', 'O'], [0, 'BTTS', 'Y'], [1, 'DNB', '1'], [1, 'DC', 'X2'], [1, 'HT1X2', 'X'], [2, '1X2', '1'], [2, 'BTTS', 'N'], [3, '1X2', 'X'], [3, 'OU25', 'O']],
       [[0, 'DC', '1X'], [0, 'OU35', 'U'], [1, '1X2', 'X'], [1, 'BTTS', 'Y'], [2, 'OU25', 'O'], [2, 'HT1X2', '1'], [3, 'BTTS', 'Y'], [4, 'DC', '1X']],
       [[0, '1X2', '2'], [0, 'BTTS', 'N'], [1, 'OU15', 'O'], [1, 'DNB', '2'], [2, 'DC', '1X'], [2, 'OU35', 'U'], [3, '1X2', '2']]
     ];
     const kpicks = [];
-    users.slice(1).forEach((u, i) => mp[i].forEach(([j, market, selection]) => kpicks.push({ id: pid++, user_id: u.id, fixture_id: fixtures[j].id, market, selection, status: null, points: null })));
-    const markets = {}; MK.ORDER.forEach(k => { if (k !== 'CS') markets[k] = MK.MARKETS[k].def; });
-    const state = { version: 2, nextId: 1000, sessionUserId: 2, settings: { exact: 5, outcome: 1, markets }, users, fixtures, predictions, picks: kpicks };
+    let kid = 1;
+    users.slice(1).forEach((u, i) => mp[i].forEach(([j, market, selection]) => kpicks.push({ id: kid++, user_id: u.id, fixture_id: fixtures[j].id, market, selection, status: null, points: null })));
+    const markets = {}; MK.ORDER.forEach(k => { markets[k] = MK.MARKETS[k].def; });
+    const state = { version: 3, nextId: 1000, sessionUserId: 2, settings: { markets }, users, fixtures, picks: kpicks };
     recompute(state);
     return state;
   }
@@ -117,7 +94,7 @@
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const s = JSON.parse(raw);
-        if (s && s.version === 2 && Array.isArray(s.picks) && Array.isArray(s.fixtures) && Array.isArray(s.users) && Array.isArray(s.predictions)) {
+        if (s && s.version === 3 && Array.isArray(s.picks) && Array.isArray(s.fixtures) && Array.isArray(s.users)) {
           recompute(s);
           if (s.sessionUserId && !s.users.some(u => u.id === s.sessionUserId)) s.sessionUserId = null;
           return s;
@@ -151,27 +128,16 @@
     else location.hash = hash;
   }
 
-  function fixtureCard(f, pred, user, interactive) {
+  function fixtureCard(f, user, interactive) {
     const done = f.home_score != null && f.away_score != null;
-    const live = isPast(f), cs = MK.list(f.markets).includes('CS');
-    const mine = {}; if (user) state.picks.filter(k => k.user_id === user.id && k.fixture_id === f.id).forEach(k => { mine[k.market] = k; });
+    const live = isPast(f);
+    const mine = {}; if (user) state.picks.filter(k => k.user_id === user.id && k.fixture_id === f.id && MK.MARKETS[k.market]).forEach(k => { mine[k.market] = k; });
     const mk = interactive ? MK.render(f, mine, { open: !!user && !done && !live, action: '#', pts: state.settings.markets }).replace(/<form method="post" action="#"/g, `<form action="#" data-fid="${f.id}"`) : '';
     const action = done
       ? `<div class="result"><b>${f.home_score}</b><span>FT</span><b>${f.away_score}</b></div>`
       : `<div class="vs">${live ? '<span class="pill red pulse">Locked</span>' : '<span class="vs-txt">VS</span>'}</div>`;
-    let form = '';
-    if (interactive && !done && !live) {
-      form = user ? (!cs ? '' : `<div class="mkt-h cs-h"><span>Correct Score</span><span class="mkt-pts">${state.settings.exact} pts</span></div><form class="predict" action="#" data-action="predict" data-id="${f.id}">
-        <input type="number" name="home" min="0" max="99" inputmode="numeric" required value="${pred?.home_goals ?? ''}" aria-label="${esc(f.home_team)} goals">
-        <span class="dash">–</span>
-        <input type="number" name="away" min="0" max="99" inputmode="numeric" required value="${pred?.away_goals ?? ''}" aria-label="${esc(f.away_team)} goals">
-        <button class="btn sm" type="submit">${pred ? 'Update' : 'Predict'}</button></form>
-        <div class="quick">${QUICK.map(s => `<button type="button" class="chip" data-q="${s}">${s}</button>`).join('')}</div>`)
-        : `<a class="btn ghost sm block" href="#/login?next=/fixtures">Log in to predict</a>`;
-    }
-    const yours = !interactive ? '' : pred
-      ? `<div class="yours">Correct score <b>${pred.home_goals} – ${pred.away_goals}</b> ${done ? ptsPill(pred.points) : ''}</div>`
-      : (user && (live || done) && !Object.keys(mine).length ? '<div class="yours muted">No prediction made</div>' : '');
+    const form = (interactive && !done && !live && !user) ? `<a class="btn ghost sm block" href="#/login?next=/fixtures">Log in to pick</a>` : '';
+    const yours = (interactive && user && (live || done) && !Object.keys(mine).length) ? '<div class="yours muted">No picks made</div>' : '';
     const countdown = !done && !live ? `<div class="countdown small muted" data-kick="${esc(f.kickoff)}"></div>` : '';
     return `<article class="card fixture" id="f${f.id}"><div class="meta"><span class="pill">${esc(f.competition)}</span>${ex(f)}<span class="muted small">${timeEl(f.kickoff)}${f.venue ? ' · ' + esc(f.venue) : ''}</span></div>
       <div class="teams"><div class="team">${badge(f.home_team, 'lg')}<span>${esc(f.home_team)}</span></div>${action}<div class="team">${badge(f.away_team, 'lg')}<span>${esc(f.away_team)}</span></div></div>
@@ -179,21 +145,20 @@
   }
 
   function homeView(user) {
-    const s = state.settings;
     const upcoming = state.fixtures.filter(f => Date.parse(f.kickoff) > Date.now()).sort(byKick(1)).slice(0, 3);
     const results = state.fixtures.filter(f => f.home_score != null).sort(byKick(-1)).slice(0, 3);
     const top = leaderboard(state).slice(0, 5);
     const stats = {
       fixtures: state.fixtures.length,
       players: state.users.filter(u => !u.is_admin).length,
-      preds: state.predictions.length
+      preds: state.picks.length
     };
-    return `<section class="hero"><span class="pill glow">Season is live</span><h1>Call the score.<br><span class="grad">Own the table.</span></h1>
-      <p class="lead muted">Pick from match result, double chance, over/under, GG/NG and more on every match — or nail the correct score for <b>${s.exact} pts</b>. Points only, bragging rights included.</p>
+    return `<section class="hero"><span class="pill glow">Season is live</span><h1>Call the match.<br><span class="grad">Own the table.</span></h1>
+      <p class="lead muted">Pick match result, double chance, over/under, GG/NG, draw no bet and 1st half. Points only, bragging rights included.</p>
       <div class="row gap wrapr">${user ? `<a class="btn lg" href="#/fixtures">Make predictions</a><a class="btn ghost lg" href="#/me">My picks</a>` : `<a class="btn lg" href="#/signup">Start predicting — free</a><a class="btn ghost lg" href="#/fixtures">Browse fixtures</a>`}</div>
       <div class="stats">${[['Fixtures', stats.fixtures], ['Players', stats.players], ['Predictions', stats.preds]].map(([l, v]) => `<div><b data-count="${v}">${v}</b><span>${l}</span></div>`).join('')}</div></section>
       <div class="grid2"><section><div class="sec-h"><h2>Up next</h2><a href="#/fixtures" class="link">All fixtures →</a></div>
-      ${upcoming.length ? upcoming.map(f => fixtureCard(f, null, null, false)).join('') : empty('📅', 'No upcoming fixtures', 'The admin will add the next round soon.')}</section>
+      ${upcoming.length ? upcoming.map(f => fixtureCard(f, null, false)).join('') : empty('📅', 'No upcoming fixtures', 'The admin will add the next round soon.')}</section>
       <section><div class="sec-h"><h2>Top predictors</h2><a href="#/leaderboard" class="link">Full table →</a></div>
       <div class="card list">${top.length ? top.map((r, i) => `<div class="lrow"><span class="rank r${i + 1}">${i + 1}</span>${badge(r.name)}<span class="grow">${esc(r.name)}</span><b>${r.pts}</b><span class="muted small">pts</span></div>`).join('') : '<p class="muted pad">No players yet — be the first!</p>'}</div>
       <div class="sec-h"><h2>Latest results</h2></div>
@@ -201,7 +166,6 @@
   }
 
   function fixturesView(user, tab) {
-    const mine = user ? Object.fromEntries(state.predictions.filter(p => p.user_id === user.id).map(p => [p.fixture_id, p])) : {};
     const fx = state.fixtures.slice().sort(byKick(1));
     const up = fx.filter(f => f.home_score == null && !isPast(f));
     const lk = fx.filter(f => f.home_score == null && isPast(f));
@@ -214,42 +178,36 @@
     list.forEach(f => { (groups[f.competition] ||= []).push(f); });
     return `<div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
       <div class="tabs">${tabs.map(([k, l, n]) => `<a href="#/fixtures?tab=${k}" class="${k === cur ? 'on' : ''}">${l} <span>${n}</span></a>`).join('')}</div>
-      ${list.length ? Object.entries(groups).map(([c, rows]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${rows.map(f => fixtureCard(f, mine[f.id], user, true)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}`;
+      ${list.length ? Object.entries(groups).map(([c, rows]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${rows.map(f => fixtureCard(f, user, true)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}`;
   }
 
   function meView(user) {
-    const rows = state.predictions.filter(p => p.user_id === user.id).map(p => {
-      const f = state.fixtures.find(x => x.id === p.fixture_id);
-      return f ? { ...p, home_team: f.home_team, away_team: f.away_team, competition: f.competition, kickoff: f.kickoff, home_score: f.home_score, away_score: f.away_score } : null;
-    }).filter(Boolean).sort(byKick(-1));
     const lb = leaderboard(state);
     const me = lb.find(r => r.id === user.id);
     const rank = lb.findIndex(r => r.id === user.id) + 1;
-    const kp = state.picks.filter(k => k.user_id === user.id);
-    const settled = rows.filter(r => r.points != null).concat(kp.filter(k => k.status && k.status !== 'void'));
+    const kp = state.picks.filter(k => k.user_id === user.id && MK.MARKETS[k.market]);
+    const settled = kp.filter(k => k.status && k.status !== 'void');
     const byF = {};
-    rows.forEach(r => (byF[r.fixture_id] ||= { f: r, items: [] }).items.push({ m: 'Correct score', sel: `${r.home_goals}–${r.away_goals}`, pts: r.points, st: r.points == null ? null : r.points > 0 ? 'won' : 'lost' }));
-    kp.forEach(k => { const f = state.fixtures.find(x => x.id === k.fixture_id); if (f) (byF[k.fixture_id] ||= { f, items: [] }).items.push({ m: MK.MARKETS[k.market]?.name || k.market, sel: MK.label(k.market, k.selection), pts: k.points, st: k.status }); });
+    kp.forEach(k => { const f = state.fixtures.find(x => x.id === k.fixture_id); if (f) (byF[k.fixture_id] ||= { f, items: [] }).items.push({ m: MK.MARKETS[k.market].name, sel: MK.label(k.market, k.selection), pts: k.points, st: k.status }); });
     const groups = Object.values(byF).sort((a, b) => Date.parse(b.f.kickoff) - Date.parse(a.f.kickoff));
     const stPill = i => i.st == null ? '<span class="pill xs">Pending</span>' : i.st === 'void' ? '<span class="pill xs">Void</span>' : i.pts > 0 ? `<span class="pill green xs">+${i.pts}</span>` : '<span class="pill red xs">0</span>';
     const acc = settled.length ? Math.round(100 * settled.filter(r => r.points > 0).length / settled.length) : 0;
     return `<div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
-      <div class="stats card"><div><b>${me?.pts ?? 0}</b><span>Points</span></div><div><b>${rank ? '#' + rank : '–'}</b><span>of ${lb.length}</span></div><div><b>${acc}%</b><span>Accuracy</span></div><div><b>${me?.exact ?? 0}</b><span>Exact scores</span></div></div>
-      <div class="sec-h"><h2>Prediction history</h2></div>
+      <div class="stats card"><div><b>${me?.pts ?? 0}</b><span>Points</span></div><div><b>${rank ? '#' + rank : '–'}</b><span>of ${lb.length}</span></div><div><b>${acc}%</b><span>Accuracy</span></div><div><b>${me?.won ?? 0}</b><span>Won</span></div></div>
+      <div class="sec-h"><h2>Pick history</h2></div>
       ${groups.length ? `<div class="card list">${groups.map(({ f: r, items }) => { const tot = items.reduce((a, i) => a + (i.pts || 0), 0), pend = items.every(i => i.st == null);
       return `<div class="lrow hist"><div class="grow"><div class="small muted">${esc(r.competition)} · ${timeEl(r.kickoff)}${r.home_score != null ? ` · FT <b>${r.home_score}–${r.away_score}</b>` : ''}</div><div class="row gap">${badge(r.home_team, 'sm')}<b>${esc(r.home_team)}</b><span class="muted">vs</span><b>${esc(r.away_team)}</b>${badge(r.away_team, 'sm')}</div>
       <div class="picklist">${items.map(i => `<span class="pk"><span class="muted">${esc(i.m)}</span> <b>${esc(i.sel)}</b> ${stPill(i)}</span>`).join('')}</div></div>
       <div class="right">${ptsPill(pend ? null : tot)}</div></div>`; }).join('')}</div>`
-      : empty('🎯', 'No predictions yet', 'Pick a fixture and call the score.', '<a class="btn" href="#/fixtures">Go to fixtures</a>')}`;
+      : empty('🎯', 'No picks yet', 'Open a fixture and tap a market.', '<a class="btn" href="#/fixtures">Go to fixtures</a>')}`;
   }
 
   function leaderboardView(user) {
-    const s = state.settings;
     const rows = leaderboard(state);
     const pod = rows.slice(0, 3);
-    return `<div class="page-h"><h1>Leaderboard</h1><p class="muted">Points from every market you pick · ${s.exact} pts for an exact score</p></div>
+    return `<div class="page-h"><h1>Leaderboard</h1><p class="muted">Points from every market you pick.</p></div>
       ${rows.length ? `<div class="podium">${[1, 0, 2].filter(i => pod[i]).map(i => `<div class="pod p${i + 1}">${badge(pod[i].name, 'xl')}<b>${esc(pod[i].name)}</b><span class="pts">${pod[i].pts} pts</span><div class="step">${i + 1}</div></div>`).join('')}</div>
-      <div class="card list">${rows.map((r, i) => `<div class="lrow ${user?.id === r.id ? 'me' : ''}"><span class="rank r${i + 1}">${i + 1}</span>${badge(r.name)}<span class="grow">${esc(r.name)}${user?.id === r.id ? ' <span class="pill green">You</span>' : ''}</span><span class="muted small hide-sm">${r.won} won · ${r.exact} exact · ${r.played} settled</span><b>${r.pts}</b></div>`).join('')}</div>`
+      <div class="card list">${rows.map((r, i) => `<div class="lrow ${user?.id === r.id ? 'me' : ''}"><span class="rank r${i + 1}">${i + 1}</span>${badge(r.name)}<span class="grow">${esc(r.name)}${user?.id === r.id ? ' <span class="pill green">You</span>' : ''}</span><span class="muted small hide-sm">${r.won} won · ${r.played} settled</span><b>${r.pts}</b></div>`).join('')}</div>`
       : empty('🏆', 'The table is empty', 'Sign up and make predictions to get on the board.', '<a class="btn" href="#/signup">Join now</a>')}`;
   }
 
@@ -287,7 +245,7 @@
       <datalist id="comps">${comps.map(c => `<option value="${esc(c)}">`).join('')}</datalist>
       <div class="row gap"><button class="btn" type="submit">${edit ? 'Save changes' : 'Add fixture'}</button>${edit ? '<a class="btn ghost" href="#/admin">Cancel</a>' : ''}</div></form>`;
     const row = f => {
-      const n = state.predictions.filter(p => p.fixture_id === f.id).length + state.picks.filter(k => k.fixture_id === f.id).length;
+      const n = state.picks.filter(k => k.fixture_id === f.id && MK.MARKETS[k.market]).length;
       const ht = MK.list(f.markets).includes('HT1X2');
       const scored = f.home_score != null;
       return `<div class="lrow admin-row"><div class="grow"><div class="small muted">${esc(f.competition)} · ${timeEl(f.kickoff)} ${ex(f)}</div><div class="row gap">${badge(f.home_team, 'sm')}<b>${esc(f.home_team)}</b><span class="muted">vs</span><b>${esc(f.away_team)}</b>${badge(f.away_team, 'sm')}</div><div class="small muted">${n} pick${n === 1 ? '' : 's'} · ${MK.list(f.markets).map(k => MK.MARKETS[k].short).join(' · ')}</div></div>
@@ -296,7 +254,7 @@
     };
     return `<div class="page-h row between wrapr" id="top"><div><h1>Admin</h1><p class="muted">Manage fixtures, results and scoring.</p></div><a class="btn ghost" href="#/admin/users">Users (${state.users.length})</a></div>
       <div class="grid2 admin-grid"><div>${form}
-      <form action="#" method="post" class="card stack" data-action="save-settings"><h3>Scoring rules</h3><p class="muted small" style="margin:0">Points awarded when a pick wins. Draw No Bet is void (0) on a draw.</p><div class="grid-3">${Object.keys(s.markets).map(k => `<label>${esc(MK.MARKETS[k].name)}<input type="number" name="pts_${k}" min="0" max="99" value="${s.markets[k]}"></label>`).join('')}<label>Correct score — exact<input type="number" name="points_exact" min="0" max="99" value="${s.exact}"></label><label>Correct score — right result<input type="number" name="points_outcome" min="0" max="99" value="${s.outcome}"></label></div><button class="btn ghost" type="submit">Save & recalculate</button></form></div>
+      <form action="#" method="post" class="card stack" data-action="save-settings"><h3>Scoring rules</h3><p class="muted small" style="margin:0">Points awarded when a pick wins. Draw No Bet is void (0) on a draw.</p><div class="grid-3">${Object.keys(s.markets).map(k => `<label>${esc(MK.MARKETS[k].name)}<input type="number" name="pts_${k}" min="0" max="99" value="${s.markets[k]}"></label>`).join('')}</div><button class="btn ghost" type="submit">Save & recalculate</button></form></div>
       <div><div class="sec-h"><h2>All fixtures</h2><span class="muted small">${fx.length} total</span></div>${fx.length ? `<div class="card list">${fx.map(row).join('')}</div>` : empty('📋', 'No fixtures yet', 'Add your first fixture using the form.')}</div></div>`;
   }
 
@@ -304,8 +262,9 @@
     const users = state.users.slice().sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id - b.id);
     return `<div class="page-h row between wrapr"><div><h1>Users</h1><p class="muted">${users.length} registered</p></div><a class="btn ghost" href="#/admin">← Back to admin</a></div>
       <div class="card list">${users.map(u => {
-        const n = state.predictions.filter(p => p.user_id === u.id).length;
-        const pts = state.predictions.filter(p => p.user_id === u.id && p.points != null).reduce((a, p) => a + p.points, 0);
+        const mine = state.picks.filter(k => k.user_id === u.id && MK.MARKETS[k.market]);
+        const n = mine.length;
+        const pts = mine.reduce((a, k) => a + (k.points || 0), 0);
         return `<div class="lrow">${badge(u.name)}<div class="grow"><b>${esc(u.name)}</b> ${u.is_admin ? '<span class="pill gold">Admin</span>' : ''}<div class="small muted">${esc(u.email)} · joined ${esc(String(u.created_at).slice(0, 10))}</div></div><span class="small muted hide-sm">${n} picks</span><b>${pts}</b><span class="muted small">pts</span>
           ${u.id !== me.id ? `<form action="#" data-action="toggle-admin" data-id="${u.id}"><button class="btn ghost sm" type="submit">${u.is_admin ? 'Revoke admin' : 'Make admin'}</button></form>` : ''}</div>`;
       }).join('')}</div>`;
@@ -405,21 +364,6 @@
 
   function setFlash(type, msg) { flash = { type, msg }; }
 
-  function onPredict(form) {
-    const user = currentUser();
-    const f = state.fixtures.find(x => x.id === +form.dataset.id);
-    if (!user || !f) return;
-    if (isPast(f)) { setFlash('error', 'Predictions are locked — this match has kicked off.'); render(); return; }
-    if (!MK.list(f.markets).includes('CS')) { setFlash('error', 'Correct Score is not open for this match.'); render(); return; }
-    const h = intOrNull(form.home.value), a = intOrNull(form.away.value);
-    if (h == null || a == null) { setFlash('error', 'Enter a valid score (0–99).'); render(); return; }
-    let p = state.predictions.find(x => x.user_id === user.id && x.fixture_id === f.id);
-    if (p) { p.home_goals = h; p.away_goals = a; }
-    else state.predictions.push({ id: state.nextId++, user_id: user.id, fixture_id: f.id, home_goals: h, away_goals: a, points: null });
-    recompute(state); save();
-    setFlash('success', `Saved: ${f.home_team} ${h} – ${a} ${f.away_team}`);
-    render({ focusId: 'f' + f.id });
-  }
   function onSaveFixture(form) {
     const id = form.dataset.id ? +form.dataset.id : 0;
     const data = readFixture(form);
@@ -462,18 +406,15 @@
   function onDelete(form) {
     const id = +form.dataset.id;
     state.fixtures = state.fixtures.filter(f => f.id !== id);
-    state.predictions = state.predictions.filter(p => p.fixture_id !== id);
     state.picks = state.picks.filter(k => k.fixture_id !== id);
     save();
     setFlash('success', 'Fixture deleted.');
     render();
   }
   function onSettings(form) {
-    const exact = intOrNull(form.points_exact.value), outcome = intOrNull(form.points_outcome.value);
-    if (exact == null || outcome == null) { setFlash('error', 'Points must be whole numbers.'); render(); return; }
     const markets = {};
     for (const k of Object.keys(state.settings.markets)) { markets[k] = intOrNull(form['pts_' + k].value); if (markets[k] == null) { setFlash('error', 'Points must be whole numbers.'); render(); return; } }
-    state.settings = { exact, outcome, markets };
+    state.settings = { markets };
     recompute(state); save();
     setFlash('success', 'Scoring updated and all points recalculated.');
     render();
@@ -542,14 +483,6 @@
       form.querySelectorAll('.opt').forEach(o => { const on = o.value === selected; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
       return;
     }
-    const chip = e.target.closest('.chip');
-    if (chip) {
-      const [h, a] = chip.dataset.q.split('-');
-      const form = chip.closest('.fixture')?.querySelector('form.predict');
-      if (!form) return;
-      form.home.value = h; form.away.value = a; form.home.focus();
-      return;
-    }
     const btn = e.target.closest('[data-action]');
     if (!btn || btn.closest('form')) return;
     if (btn.dataset.action === 'logout') { state.sessionUserId = null; save(); go('#/'); }
@@ -577,8 +510,7 @@
     e.preventDefault();
     if (form.dataset.confirm && !confirm(form.dataset.confirm)) return;
     const action = form.dataset.action;
-    if (action === 'predict') onPredict(form);
-    else if (action === 'save-fixture') onSaveFixture(form);
+    if (action === 'save-fixture') onSaveFixture(form);
     else if (action === 'result') onResult(form);
     else if (action === 'clear-result') onClear(form);
     else if (action === 'delete-fixture') onDelete(form);

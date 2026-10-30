@@ -1,7 +1,7 @@
 {
   "name": "Matchday Predictions",
   "short_name": "Matchday",
-  "description": "Predict match scores and climb the leaderboard.",
+  "description": "Pick match markets and climb the leaderboard.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

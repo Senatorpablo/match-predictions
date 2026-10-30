@@ -30,37 +30,22 @@ const locked = f => Date.now() >= Date.parse(f.kickoff);
 const int = v => { const n = parseInt(v, 10); return Number.isInteger(n) && n >= 0 && n <= 99 ? n : null; };
 
 const leaderboard = () => db.prepare(`SELECT u.id,u.name,
-  COALESCE((SELECT SUM(points) FROM predictions WHERE user_id=u.id),0)+COALESCE((SELECT SUM(points) FROM picks WHERE user_id=u.id),0) pts,
-  (SELECT COUNT(points) FROM predictions WHERE user_id=u.id)+(SELECT COUNT(status) FROM picks WHERE user_id=u.id) played,
-  (SELECT COUNT(*) FROM picks WHERE user_id=u.id AND status='won')+(SELECT COUNT(*) FROM predictions p JOIN fixtures f ON f.id=p.fixture_id WHERE p.user_id=u.id AND p.home_goals=f.home_score AND p.away_goals=f.away_score) won,
-  (SELECT COUNT(*) FROM predictions p JOIN fixtures f ON f.id=p.fixture_id WHERE p.user_id=u.id AND p.home_goals=f.home_score AND p.away_goals=f.away_score) exact
-  FROM users u WHERE u.is_admin=0 ORDER BY pts DESC, exact DESC, won DESC, u.name`).all();
+  COALESCE((SELECT SUM(points) FROM picks WHERE user_id=u.id),0) pts,
+  (SELECT COUNT(status) FROM picks WHERE user_id=u.id) played,
+  (SELECT COUNT(*) FROM picks WHERE user_id=u.id AND status='won') won
+  FROM users u WHERE u.is_admin=0 ORDER BY pts DESC, won DESC, u.name`).all();
 const picksFor = uid => { const o = {}; if (uid) for (const k of db.prepare('SELECT * FROM picks WHERE user_id=?').all(uid)) (o[k.fixture_id] ||= {})[k.market] = k; return o; };
 
 app.get('/', (req, res) => {
   const upcoming = db.prepare(`SELECT * FROM fixtures WHERE kickoff > ? ORDER BY kickoff LIMIT 3`).all(new Date().toISOString());
   const results = db.prepare(`SELECT * FROM fixtures WHERE home_score IS NOT NULL ORDER BY kickoff DESC LIMIT 3`).all();
-  const stats = { fixtures: db.prepare('SELECT COUNT(*) c FROM fixtures').get().c, players: db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin=0').get().c, preds: db.prepare('SELECT COUNT(*) c FROM predictions').get().c };
+  const stats = { fixtures: db.prepare('SELECT COUNT(*) c FROM fixtures').get().c, players: db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin=0').get().c, preds: db.prepare('SELECT COUNT(*) c FROM picks').get().c };
   res.page('Home', V.home({ user: req.user, upcoming, results, top: leaderboard().slice(0, 5), stats, s: settings() }), { active: 'home' });
 });
 
 app.get('/fixtures', (req, res) => {
   const fx = db.prepare('SELECT * FROM fixtures ORDER BY kickoff').all();
-  const mine = req.user ? Object.fromEntries(db.prepare('SELECT * FROM predictions WHERE user_id=?').all(req.user.id).map(p => [p.fixture_id, p])) : {};
-  res.page('Fixtures', V.fixtures({ fx, mine, picks: picksFor(req.user?.id), user: req.user, tab: req.query.tab || 'upcoming', s: settings() }), { active: 'fixtures' });
-});
-
-app.post('/predict/:id', auth, (req, res) => {
-  const f = db.prepare('SELECT * FROM fixtures WHERE id=?').get(req.params.id);
-  if (!f) return res.status(404).page('Not found', V.empty('🤷', 'Fixture not found', ''));
-  if (locked(f)) { flash(req, 'error', 'Predictions are locked — this match has kicked off.'); return res.status(423).redirect('/fixtures'); }
-  if (!M.list(f.markets).includes('CS')) { flash(req, 'error', 'Correct Score is not open for this match.'); return res.redirect('/fixtures'); }
-  const h = int(req.body.home), a = int(req.body.away);
-  if (h == null || a == null) { flash(req, 'error', 'Enter a valid score (0–99).'); return res.redirect('/fixtures'); }
-  db.prepare(`INSERT INTO predictions(user_id,fixture_id,home_goals,away_goals) VALUES(?,?,?,?)
-    ON CONFLICT(user_id,fixture_id) DO UPDATE SET home_goals=excluded.home_goals,away_goals=excluded.away_goals,updated_at=CURRENT_TIMESTAMP`).run(req.user.id, f.id, h, a);
-  flash(req, 'success', `Saved: ${f.home_team} ${h} – ${a} ${f.away_team}`);
-  res.redirect('/fixtures#f' + f.id);
+  res.page('Fixtures', V.fixtures({ fx, picks: picksFor(req.user?.id), user: req.user, tab: req.query.tab || 'upcoming', s: settings() }), { active: 'fixtures' });
 });
 
 // One-tap market picks (1X2, DC, O/U, GG/NG, DNB, HT). Tapping the same option again removes it.
@@ -82,10 +67,9 @@ app.post('/pick/:id', auth, (req, res) => {
 });
 
 app.get('/me', auth, (req, res) => {
-  const rows = db.prepare(`SELECT p.*,f.home_team,f.away_team,f.competition,f.kickoff,f.home_score,f.away_score FROM predictions p JOIN fixtures f ON f.id=p.fixture_id WHERE p.user_id=? ORDER BY f.kickoff DESC`).all(req.user.id);
   const lb = leaderboard(); const rank = lb.findIndex(r => r.id === req.user.id) + 1;
   const picks = db.prepare(`SELECT k.*,f.home_team,f.away_team,f.competition,f.kickoff,f.home_score,f.away_score FROM picks k JOIN fixtures f ON f.id=k.fixture_id WHERE k.user_id=? ORDER BY f.kickoff DESC`).all(req.user.id);
-  res.page('My predictions', V.me({ user: req.user, rows, picks, rank, total: lb.length, me: lb.find(r => r.id === req.user.id) }), { active: 'me' });
+  res.page('My picks', V.me({ user: req.user, picks, rank, total: lb.length, me: lb.find(r => r.id === req.user.id) }), { active: 'me' });
 });
 
 app.get('/leaderboard', (req, res) => res.page('Leaderboard', V.leaderboard({ rows: leaderboard(), user: req.user, s: settings() }), { active: 'leaderboard' }));
@@ -110,7 +94,7 @@ app.post('/logout', (req, res) => { req.session = null; res.redirect('/'); });
 
 // ---- Admin ----
 app.get('/admin', admin, (req, res) => {
-  const fx = db.prepare(`SELECT f.*,(SELECT COUNT(*) FROM predictions p WHERE p.fixture_id=f.id)+(SELECT COUNT(*) FROM picks k WHERE k.fixture_id=f.id) n FROM fixtures f ORDER BY kickoff DESC`).all();
+  const fx = db.prepare(`SELECT f.*,(SELECT COUNT(*) FROM picks k WHERE k.fixture_id=f.id) n FROM fixtures f ORDER BY kickoff DESC`).all();
   const edit = req.query.edit ? db.prepare('SELECT * FROM fixtures WHERE id=?').get(req.query.edit) : null;
   res.page('Admin', V.admin({ fx, edit, s: settings(), counts: { users: db.prepare('SELECT COUNT(*) c FROM users').get().c } }), { active: 'admin' });
 });
@@ -141,13 +125,11 @@ app.post('/admin/fixtures/:id/result', admin, (req, res) => {
   recompute(req.params.id); flash(req, 'success', clear ? 'Result cleared.' : 'Result saved — points updated.'); res.redirect('/admin');
 });
 app.post('/admin/settings', admin, (req, res) => {
-  const e = int(req.body.points_exact), o = int(req.body.points_outcome);
-  if (e == null || o == null) { flash(req, 'error', 'Points must be whole numbers.'); return res.redirect('/admin'); }
   const mk = {}; for (const k of Object.keys(settings().markets)) { mk[k] = int(req.body['pts_' + k]); if (mk[k] == null) { flash(req, 'error', 'Points must be whole numbers.'); return res.redirect('/admin'); } }
-  set('points_exact', e); set('points_outcome', o); for (const k in mk) set('pts_' + k, mk[k]); recomputeAll(); flash(req, 'success', 'Scoring updated and all points recalculated.'); res.redirect('/admin');
+  for (const k in mk) set('pts_' + k, mk[k]); recomputeAll(); flash(req, 'success', 'Scoring updated and all points recalculated.'); res.redirect('/admin');
 });
 app.get('/admin/users', admin, (req, res) => {
-  const users = db.prepare(`SELECT u.*,COUNT(p.id) n,COALESCE(SUM(p.points),0)+COALESCE((SELECT SUM(points) FROM picks WHERE user_id=u.id),0) pts FROM users u LEFT JOIN predictions p ON p.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC`).all();
+  const users = db.prepare(`SELECT u.*,(SELECT COUNT(*) FROM picks WHERE user_id=u.id) n,COALESCE((SELECT SUM(points) FROM picks WHERE user_id=u.id),0) pts FROM users u ORDER BY u.created_at DESC`).all();
   res.page('Users', V.users({ users, me: req.user }), { active: 'admin' });
 });
 app.post('/admin/users/:id/toggle-admin', admin, (req, res) => {

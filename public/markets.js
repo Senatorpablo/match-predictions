@@ -15,17 +15,16 @@
     DNB: { name: 'Draw No Bet', short: 'DNB', opts: [['1', 'Home'], ['2', 'Away']], def: 1,
       settle: (s, f) => (f.home_score === f.away_score ? 'void' : s === res(f.home_score, f.away_score) ? 'won' : 'lost') },
     HT1X2: { name: '1st Half Result', short: 'HT 1X2', opts: [['1', 'Home'], ['X', 'Draw'], ['2', 'Away']], def: 2, needsHT: true,
-      settle: (s, f) => (f.ht_home == null || f.ht_away == null ? 'void' : s === res(f.ht_home, f.ht_away) ? 'won' : 'lost') },
-    CS: { name: 'Correct Score', short: 'CS', score: true, def: 5 }
+      settle: (s, f) => (f.ht_home == null || f.ht_away == null ? 'void' : s === res(f.ht_home, f.ht_away) ? 'won' : 'lost') }
   };
-  const ORDER = ['1X2', 'DC', 'OU05', 'OU15', 'OU25', 'OU35', 'BTTS', 'DNB', 'HT1X2', 'CS'];
-  const DEFAULT = ['1X2', 'DC', 'OU25', 'BTTS', 'CS'];
+  const ORDER = ['1X2', 'DC', 'OU05', 'OU15', 'OU25', 'OU35', 'BTTS', 'DNB', 'HT1X2'];
+  const DEFAULT = ['1X2', 'DC', 'OU25', 'BTTS'];
   const list = str => { const s = String(str || '').split(',').map(x => x.trim()).filter(k => MARKETS[k]); return s.length ? ORDER.filter(k => s.includes(k)) : DEFAULT.slice(); };
-  const valid = (m, sel) => !!MARKETS[m] && !MARKETS[m].score && MARKETS[m].opts.some(o => o[0] === sel);
+  const valid = (m, sel) => !!MARKETS[m] && MARKETS[m].opts.some(o => o[0] === sel);
   const settled = f => f.home_score != null && f.away_score != null;
   /** Returns { status: 'won'|'lost'|'void'|null, points } for a one-click pick. pts = { [market]: points } */
   function settle(m, sel, f, pts) {
-    if (!settled(f) || !MARKETS[m] || MARKETS[m].score) return { status: null, points: null };
+    if (!settled(f) || !MARKETS[m]) return { status: null, points: null };
     const status = MARKETS[m].settle(sel, f);
     return { status, points: status === 'won' ? (pts && pts[m] != null ? +pts[m] : MARKETS[m].def) : 0 };
   }
@@ -35,7 +34,7 @@
    *  o = { open: bool (can pick), action: url for the pick form, pts: points map, loggedIn: bool } */
   function render(f, picks, o) {
     picks = picks || {}; const done = settled(f);
-    const blocks = list(f.markets).filter(k => k !== 'CS').map(k => {
+    const blocks = list(f.markets).map(k => {
       const m = MARKETS[k], mine = picks[k];
       let win = null; if (done) { const t = m.opts.find(x => m.settle(x[0], f) === 'won'); win = t ? t[0] : null; }
       const btns = m.opts.map(([v, l]) => {
