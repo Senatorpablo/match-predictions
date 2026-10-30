@@ -1,4 +1,5 @@
 const M = require('./public/markets.js');
+const A = require('./public/advisor.js');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hue = s => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 const initials = n => String(n).replace(/\(.*?\)/g, '').split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase();
@@ -60,19 +61,20 @@ function home({ user, upcoming, results, top, stats }) {
   <div class="card list">${results.length ? results.map(f => `<div class="lrow">${badge(f.home_team, 'sm')}<span class="grow small">${esc(f.home_team)}</span><b class="score">${f.home_score} – ${f.away_score}</b><span class="grow small right">${esc(f.away_team)}</span>${badge(f.away_team, 'sm')}</div>`).join('') : '<p class="muted pad">Results will appear here after matches.</p>'}</div></section></div>`;
 }
 
-function fixtures({ fx, picks = {}, user, tab, s }) {
+function fixtures({ fx, picks = {}, user, tab, s, slip }) {
   const up = fx.filter(f => f.home_score == null && !isPast(f)), lk = fx.filter(f => f.home_score == null && isPast(f)), res = fx.filter(f => f.home_score != null).reverse();
   const lists = { upcoming: up, live: lk, results: res };
   const cur = lists[tab] ? tab : 'upcoming';
   const tabs = [['upcoming', 'Upcoming', up.length], ['live', 'In play / awaiting', lk.length], ['results', 'Results', res.length]];
   const list = lists[cur];
   const groups = {}; list.forEach(f => (groups[f.competition] ||= []).push(f));
-  return `<div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
+  return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
   <div class="tabs">${tabs.map(([k, l, n]) => `<a href="?tab=${k}" class="${k === cur ? 'on' : ''}">${l} <span>${n}</span></a>`).join('')}</div>
-  ${list.length ? Object.entries(groups).map(([c, l]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${l.map(f => fixtureCard(f, user, picks[f.id], s)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}`;
+  ${list.length ? Object.entries(groups).map(([c, l]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${l.map(f => fixtureCard(f, user, picks[f.id], s)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}</div>
+  ${A.render({ loggedIn: !!user, picks: slip || [] })}</div>`;
 }
 
-function me({ user, picks = [], rank, total, me }) {
+function me({ user, picks = [], rank, total, me, slip }) {
   const shown = picks.filter(k => M.MARKETS[k.market]);
   const settled = shown.filter(k => k.status && k.status !== 'void');
   const acc = settled.length ? Math.round(100 * settled.filter(r => r.points > 0).length / settled.length) : 0;
@@ -80,14 +82,15 @@ function me({ user, picks = [], rank, total, me }) {
   for (const k of shown) (byF[k.fixture_id] ||= { f: k, items: [] }).items.push({ m: M.MARKETS[k.market].name, sel: M.label(k.market, k.selection), pts: k.points, st: k.status });
   const groups = Object.values(byF).sort((a, b) => Date.parse(b.f.kickoff) - Date.parse(a.f.kickoff));
   const stPill = i => i.st == null ? '<span class="pill xs">Pending</span>' : i.st === 'void' ? '<span class="pill xs">Void</span>' : i.st === 'won' || i.pts > 0 ? `<span class="pill green xs">+${i.pts}</span>` : '<span class="pill red xs">0</span>';
-  return `<div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
+  return `<div class="page-split"><div class="page-main"><div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
   <div class="stats card"><div><b>${me?.pts ?? 0}</b><span>Points</span></div><div><b>${rank ? '#' + rank : '–'}</b><span>of ${total}</span></div><div><b>${acc}%</b><span>Accuracy</span></div><div><b>${me?.won ?? 0}</b><span>Won</span></div></div>
   <div class="sec-h"><h2>Pick history</h2></div>
   ${groups.length ? `<div class="card list">${groups.map(({ f: r, items }) => { const tot = items.reduce((a, i) => a + (i.pts || 0), 0), pend = items.every(i => i.st == null);
   return `<div class="lrow hist"><div class="grow"><div class="small muted">${esc(r.competition)} · ${time(r.kickoff)}${r.home_score != null ? ` · FT <b>${r.home_score}–${r.away_score}</b>` : ''}</div><div class="row gap">${badge(r.home_team, 'sm')}<b>${esc(r.home_team)}</b><span class="muted">vs</span><b>${esc(r.away_team)}</b>${badge(r.away_team, 'sm')}</div>
   <div class="picklist">${items.map(i => `<span class="pk ${i.st || ''}"><span class="muted">${esc(i.m)}</span> <b>${esc(i.sel)}</b> ${stPill(i)}</span>`).join('')}</div></div>
   <div class="right">${ptsPill(pend ? null : tot)}</div></div>`; }).join('')}</div>`
-    : empty('🎯', 'No picks yet', 'Open a fixture and tap a market.', '<a class="btn" href="/fixtures">Go to fixtures</a>')}`;
+    : empty('🎯', 'No picks yet', 'Open a fixture and tap a market.', '<a class="btn" href="/fixtures">Go to fixtures</a>')}</div>
+  ${A.render({ loggedIn: true, picks: slip || [] })}</div>`;
 }
 
 function leaderboard({ rows, user }) {
@@ -115,6 +118,9 @@ function admin({ fx, edit, s, counts }) {
    <div class="grid-2"><label>Home team<input name="home_team" required value="${v('home_team')}" placeholder="e.g. Arsenal"></label><label>Away team<input name="away_team" required value="${v('away_team')}" placeholder="e.g. Chelsea"></label></div>
    <div class="grid-2"><label>Competition<input name="competition" required value="${v('competition')}" placeholder="e.g. Premier League" list="comps"></label><label>Kickoff (your local time)<input type="datetime-local" name="kickoff" required data-iso="${v('kickoff')}"></label></div>
    <label>Venue <span class="muted">(optional)</span><input name="venue" value="${v('venue')}" placeholder="e.g. Emirates Stadium"></label>
+   <div class="advisor-fields"><p class="muted small" style="margin:0">Advisor form, optional. Last 5 is oldest to newest (WWDLW). Blank uses a neutral default.</p>
+   <div class="grid-2"><label>Home last 5<input name="home_form" maxlength="5" placeholder="WWDLW" value="${v('home_form')}" autocapitalize="characters"></label><label>Away last 5<input name="away_form" maxlength="5" placeholder="LDWLL" value="${v('away_form')}" autocapitalize="characters"></label></div>
+   <div class="grid-2"><label>Home strength 1–10<input type="number" name="home_strength" min="1" max="10" placeholder="5" value="${edit?.home_strength ?? ''}"></label><label>Away strength 1–10<input type="number" name="away_strength" min="1" max="10" placeholder="5" value="${edit?.away_strength ?? ''}"></label></div></div>
    <fieldset class="mkt-pick"><legend>Markets players can pick</legend>${M.ORDER.map(k => `<label class="chk"><input type="checkbox" name="markets" value="${k}" ${M.list(edit?.markets).includes(k) ? 'checked' : ''}><span>${esc(M.MARKETS[k].name)}</span></label>`).join('')}</fieldset>
    <input type="hidden" name="kickoff_iso"><datalist id="comps">${[...new Set(fx.map(f => f.competition))].map(c => `<option value="${esc(c)}">`).join('')}</datalist>
    <div class="row gap"><button class="btn">${edit ? 'Save changes' : 'Add fixture'}</button>${edit ? '<a class="btn ghost" href="/admin">Cancel</a>' : ''}</div></form>`;

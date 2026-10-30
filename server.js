@@ -7,6 +7,7 @@ const fs = require('fs');
 const { db, settings, set, ensureAdmin, recompute, recomputeAll } = require('./db');
 const V = require('./views');
 const M = require('./public/markets.js');
+const A = require('./public/advisor.js');
 
 ensureAdmin();
 const secretFile = path.join(__dirname, 'data', '.session-secret');
@@ -43,9 +44,10 @@ app.get('/', (req, res) => {
   res.page('Home', V.home({ user: req.user, upcoming, results, top: leaderboard().slice(0, 5), stats, s: settings() }), { active: 'home' });
 });
 
+const openSlip = uid => uid ? db.prepare(`SELECT k.market,k.selection,f.home_team,f.away_team,f.competition,f.kickoff,f.home_score,f.home_form,f.away_form,f.home_strength,f.away_strength FROM picks k JOIN fixtures f ON f.id=k.fixture_id WHERE k.user_id=? AND f.home_score IS NULL ORDER BY f.kickoff,k.market`).all(uid) : [];
 app.get('/fixtures', (req, res) => {
   const fx = db.prepare('SELECT * FROM fixtures ORDER BY kickoff').all();
-  res.page('Fixtures', V.fixtures({ fx, picks: picksFor(req.user?.id), user: req.user, tab: req.query.tab || 'upcoming', s: settings() }), { active: 'fixtures' });
+  res.page('Fixtures', V.fixtures({ fx, picks: picksFor(req.user?.id), user: req.user, tab: req.query.tab || 'upcoming', s: settings(), slip: openSlip(req.user?.id) }), { active: 'fixtures' });
 });
 
 // One-tap market picks (1X2, DC, O/U, GG/NG, DNB, HT). Tapping the same option again removes it.
@@ -61,7 +63,7 @@ app.post('/pick/:id', auth, (req, res) => {
   let selected = sel;
   if (cur && cur.selection === sel) { db.prepare('DELETE FROM picks WHERE id=?').run(cur.id); selected = null; }
   else db.prepare(`INSERT INTO picks(user_id,fixture_id,market,selection) VALUES(?,?,?,?) ON CONFLICT(user_id,fixture_id,market) DO UPDATE SET selection=excluded.selection,updated_at=CURRENT_TIMESTAMP`).run(req.user.id, f.id, m, sel);
-  if (json) return res.json({ ok: true, market: m, selection: selected });
+  if (json) return res.json({ ok: true, market: m, selection: selected, advisor: A.render({ loggedIn: true, picks: openSlip(req.user.id) }) });
   flash(req, 'success', selected ? `Picked ${M.MARKETS[m].name}: ${M.label(m, sel)}` : 'Pick removed.');
   res.redirect('/fixtures#f' + f.id);
 });
@@ -69,7 +71,7 @@ app.post('/pick/:id', auth, (req, res) => {
 app.get('/me', auth, (req, res) => {
   const lb = leaderboard(); const rank = lb.findIndex(r => r.id === req.user.id) + 1;
   const picks = db.prepare(`SELECT k.*,f.home_team,f.away_team,f.competition,f.kickoff,f.home_score,f.away_score FROM picks k JOIN fixtures f ON f.id=k.fixture_id WHERE k.user_id=? ORDER BY f.kickoff DESC`).all(req.user.id);
-  res.page('My picks', V.me({ user: req.user, picks, rank, total: lb.length, me: lb.find(r => r.id === req.user.id) }), { active: 'me' });
+  res.page('My picks', V.me({ user: req.user, picks, rank, total: lb.length, me: lb.find(r => r.id === req.user.id), slip: openSlip(req.user.id) }), { active: 'me' });
 });
 
 app.get('/leaderboard', (req, res) => res.page('Leaderboard', V.leaderboard({ rows: leaderboard(), user: req.user, s: settings() }), { active: 'leaderboard' }));
@@ -102,16 +104,21 @@ function readFixture(b) {
   const f = { home_team: String(b.home_team || '').trim(), away_team: String(b.away_team || '').trim(), competition: String(b.competition || '').trim(), venue: String(b.venue || '').trim() || null, kickoff: b.kickoff_iso || b.kickoff, markets: M.list([].concat(b.markets || []).join(',')).join(',') };
   const t = Date.parse(f.kickoff);
   if (!f.home_team || !f.away_team || !f.competition || isNaN(t)) return null;
-  f.kickoff = new Date(t).toISOString(); return f;
+  const hs = A.cleanStrength(b.home_strength), as = A.cleanStrength(b.away_strength);
+  if (hs === false || as === false) return { error: 'Strength must be a whole number from 1 to 10, or left blank.' };
+  f.kickoff = new Date(t).toISOString();
+  f.home_form = A.cleanForm(b.home_form); f.away_form = A.cleanForm(b.away_form);
+  f.home_strength = hs; f.away_strength = as;
+  return f;
 }
 app.post('/admin/fixtures', admin, (req, res) => {
-  const f = readFixture(req.body); if (!f) { flash(req, 'error', 'Home team, away team, competition and kickoff are required.'); return res.redirect('/admin'); }
-  db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,markets) VALUES(@home_team,@away_team,@competition,@kickoff,@venue,@markets)').run(f);
+  const f = readFixture(req.body); if (!f || f.error) { flash(req, 'error', f?.error || 'Home team, away team, competition and kickoff are required.'); return res.redirect('/admin'); }
+  db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,markets,home_form,away_form,home_strength,away_strength) VALUES(@home_team,@away_team,@competition,@kickoff,@venue,@markets,@home_form,@away_form,@home_strength,@away_strength)').run(f);
   flash(req, 'success', `Fixture added: ${f.home_team} vs ${f.away_team}`); res.redirect('/admin');
 });
 app.post('/admin/fixtures/:id', admin, (req, res) => {
-  const f = readFixture(req.body); if (!f) { flash(req, 'error', 'All required fields must be filled.'); return res.redirect('/admin?edit=' + req.params.id); }
-  db.prepare('UPDATE fixtures SET home_team=@home_team,away_team=@away_team,competition=@competition,kickoff=@kickoff,venue=@venue,markets=@markets WHERE id=@id').run({ ...f, id: req.params.id });
+  const f = readFixture(req.body); if (!f || f.error) { flash(req, 'error', f?.error || 'All required fields must be filled.'); return res.redirect('/admin?edit=' + req.params.id); }
+  db.prepare('UPDATE fixtures SET home_team=@home_team,away_team=@away_team,competition=@competition,kickoff=@kickoff,venue=@venue,markets=@markets,home_form=@home_form,away_form=@away_form,home_strength=@home_strength,away_strength=@away_strength WHERE id=@id').run({ ...f, id: req.params.id });
   recompute(req.params.id);
   flash(req, 'success', 'Fixture updated.'); res.redirect('/admin');
 });

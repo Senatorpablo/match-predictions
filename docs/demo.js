@@ -1,6 +1,7 @@
 /* Static Matchday demo. State lives in localStorage. All links are relative or in-page hashes. */
 (() => {
-  const KEY = 'matchday-demo-v3';
+  const KEY = 'matchday-demo-v4';
+  const AD = window.Advisor;
   const MK = window.Markets;
   const ICONS = { home: '⌂', fixtures: '⚽', leaderboard: '🏆', me: '★', admin: '⚙' };
   const PATHS = ['/', '/fixtures', '/me', '/leaderboard', '/admin', '/admin/users', '/login', '/signup'];
@@ -58,11 +59,13 @@
       ['Juventus', 'Napoli', 'Serie A', 8, 19, 'Allianz Stadium']
     ];
     const created = new Date(now).toISOString();
+    const FORMS = [['WWDLW', 'LDWLL', 8, 4], ['WDLWD', 'WDLWD', 6, 6], ['WWWWD', 'LLLLD', 9, 3], ['WDWLW', 'DWLLD', 7, 5], [null, null, null, null], ['DLLWW', 'WWLDW', 4, 8], ['DWDWL', 'LWDWL', 5, 5], ['WWWWW', 'LLLLL', 9, 2], ['WLWDW', 'DLWDL', 6, 6]];
     const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2', DEF = MK.DEFAULT.join(',');
     const MKS = [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB', DEF, '1X2,OU25,BTTS', DEF];
     const fixtures = fx.map((f, i) => ({
       id: i + 1, home_team: f[0], away_team: f[1], competition: f[2], kickoff: iso(f[3], f[4]),
-      venue: f[5], home_score: f[6] ?? null, away_score: f[7] ?? null, ht_home: f[8] ?? null, ht_away: f[9] ?? null, markets: MKS[i], is_example: 1, created_at: created
+      venue: f[5], home_score: f[6] ?? null, away_score: f[7] ?? null, ht_home: f[8] ?? null, ht_away: f[9] ?? null, markets: MKS[i],
+      home_form: FORMS[i][0], away_form: FORMS[i][1], home_strength: FORMS[i][2], away_strength: FORMS[i][3], is_example: 1, created_at: created
     }));
     const users = [
       { id: 1, name: 'Admin', email: 'admin@matchday.local', password: 'demo1234', is_admin: 1, example: 1, created_at: created },
@@ -79,7 +82,7 @@
     let kid = 1;
     users.slice(1).forEach((u, i) => mp[i].forEach(([j, market, selection]) => kpicks.push({ id: kid++, user_id: u.id, fixture_id: fixtures[j].id, market, selection, status: null, points: null })));
     const markets = {}; MK.ORDER.forEach(k => { markets[k] = MK.MARKETS[k].def; });
-    const state = { version: 3, nextId: 1000, sessionUserId: 2, settings: { markets }, users, fixtures, picks: kpicks };
+    const state = { version: 4, nextId: 1000, sessionUserId: 2, settings: { markets }, users, fixtures, picks: kpicks };
     recompute(state);
     return state;
   }
@@ -94,7 +97,7 @@
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const s = JSON.parse(raw);
-        if (s && s.version === 3 && Array.isArray(s.picks) && Array.isArray(s.fixtures) && Array.isArray(s.users)) {
+        if (s && s.version === 4 && Array.isArray(s.picks) && Array.isArray(s.fixtures) && Array.isArray(s.users)) {
           recompute(s);
           if (s.sessionUserId && !s.users.some(u => u.id === s.sessionUserId)) s.sessionUserId = null;
           return s;
@@ -176,9 +179,10 @@
     const list = lists[cur];
     const groups = Object.create(null);
     list.forEach(f => { (groups[f.competition] ||= []).push(f); });
-    return `<div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
+    return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
       <div class="tabs">${tabs.map(([k, l, n]) => `<a href="#/fixtures?tab=${k}" class="${k === cur ? 'on' : ''}">${l} <span>${n}</span></a>`).join('')}</div>
-      ${list.length ? Object.entries(groups).map(([c, rows]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${rows.map(f => fixtureCard(f, user, true)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}`;
+      ${list.length ? Object.entries(groups).map(([c, rows]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${rows.map(f => fixtureCard(f, user, true)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}</div>
+      ${AD.render({ loggedIn: !!user, picks: openSlip(user) })}</div>`;
   }
 
   function meView(user) {
@@ -192,14 +196,15 @@
     const groups = Object.values(byF).sort((a, b) => Date.parse(b.f.kickoff) - Date.parse(a.f.kickoff));
     const stPill = i => i.st == null ? '<span class="pill xs">Pending</span>' : i.st === 'void' ? '<span class="pill xs">Void</span>' : i.pts > 0 ? `<span class="pill green xs">+${i.pts}</span>` : '<span class="pill red xs">0</span>';
     const acc = settled.length ? Math.round(100 * settled.filter(r => r.points > 0).length / settled.length) : 0;
-    return `<div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
+    return `<div class="page-split"><div class="page-main"><div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
       <div class="stats card"><div><b>${me?.pts ?? 0}</b><span>Points</span></div><div><b>${rank ? '#' + rank : '–'}</b><span>of ${lb.length}</span></div><div><b>${acc}%</b><span>Accuracy</span></div><div><b>${me?.won ?? 0}</b><span>Won</span></div></div>
       <div class="sec-h"><h2>Pick history</h2></div>
       ${groups.length ? `<div class="card list">${groups.map(({ f: r, items }) => { const tot = items.reduce((a, i) => a + (i.pts || 0), 0), pend = items.every(i => i.st == null);
       return `<div class="lrow hist"><div class="grow"><div class="small muted">${esc(r.competition)} · ${timeEl(r.kickoff)}${r.home_score != null ? ` · FT <b>${r.home_score}–${r.away_score}</b>` : ''}</div><div class="row gap">${badge(r.home_team, 'sm')}<b>${esc(r.home_team)}</b><span class="muted">vs</span><b>${esc(r.away_team)}</b>${badge(r.away_team, 'sm')}</div>
       <div class="picklist">${items.map(i => `<span class="pk"><span class="muted">${esc(i.m)}</span> <b>${esc(i.sel)}</b> ${stPill(i)}</span>`).join('')}</div></div>
       <div class="right">${ptsPill(pend ? null : tot)}</div></div>`; }).join('')}</div>`
-      : empty('🎯', 'No picks yet', 'Open a fixture and tap a market.', '<a class="btn" href="#/fixtures">Go to fixtures</a>')}`;
+      : empty('🎯', 'No picks yet', 'Open a fixture and tap a market.', '<a class="btn" href="#/fixtures">Go to fixtures</a>')}</div>
+      ${AD.render({ loggedIn: true, picks: openSlip(user) })}</div>`;
   }
 
   function leaderboardView(user) {
@@ -227,7 +232,16 @@
     const kickoffDate = new Date(local);
     if (isNaN(kickoffDate)) return null;
     const markets = MK.list([...form.querySelectorAll('input[name=markets]:checked')].map(i => i.value).join(',')).join(',');
-    return { home_team, away_team, competition, venue, markets, kickoff: kickoffDate.toISOString() };
+    const home_strength = AD.cleanStrength(form.home_strength.value), away_strength = AD.cleanStrength(form.away_strength.value);
+    if (home_strength === false || away_strength === false) return { error: 'Strength must be a whole number from 1 to 10, or left blank.' };
+    return { home_team, away_team, competition, venue, markets, kickoff: kickoffDate.toISOString(), home_form: AD.cleanForm(form.home_form.value), away_form: AD.cleanForm(form.away_form.value), home_strength, away_strength };
+  }
+  function openSlip(user) {
+    if (!user) return [];
+    return state.picks.filter(k => MK.MARKETS[k.market] && k.user_id === user.id).map(k => {
+      const f = state.fixtures.find(x => x.id === k.fixture_id);
+      return f ? { ...f, market: k.market, selection: k.selection } : null;
+    }).filter(Boolean);
   }
 
   function adminView(editId) {
@@ -241,6 +255,9 @@
       <div class="grid-2"><label>Home team<input name="home_team" required value="${v('home_team')}" placeholder="e.g. Arsenal"></label><label>Away team<input name="away_team" required value="${v('away_team')}" placeholder="e.g. Chelsea"></label></div>
       <div class="grid-2"><label>Competition<input name="competition" required value="${v('competition')}" placeholder="e.g. Premier League" list="comps"></label><label>Kickoff (your local time)<input type="datetime-local" name="kickoff" required value="${edit ? esc(toLocalInput(edit.kickoff)) : ''}"></label></div>
       <label>Venue <span class="muted">(optional)</span><input name="venue" value="${v('venue')}" placeholder="e.g. Emirates Stadium"></label>
+      <div class="advisor-fields"><p class="muted small" style="margin:0">Advisor form, optional. Last 5 is oldest to newest (WWDLW). Blank uses a neutral default.</p>
+      <div class="grid-2"><label>Home last 5<input name="home_form" maxlength="5" placeholder="WWDLW" value="${v('home_form')}" autocapitalize="characters"></label><label>Away last 5<input name="away_form" maxlength="5" placeholder="LDWLL" value="${v('away_form')}" autocapitalize="characters"></label></div>
+      <div class="grid-2"><label>Home strength 1–10<input type="number" name="home_strength" min="1" max="10" placeholder="5" value="${edit?.home_strength ?? ''}"></label><label>Away strength 1–10<input type="number" name="away_strength" min="1" max="10" placeholder="5" value="${edit?.away_strength ?? ''}"></label></div></div>
       <fieldset class="mkt-pick"><legend>Markets players can pick</legend>${MK.ORDER.map(k => `<label class="chk"><input type="checkbox" name="markets" value="${k}" ${MK.list(edit?.markets).includes(k) ? 'checked' : ''}><span>${esc(MK.MARKETS[k].name)}</span></label>`).join('')}</fieldset>
       <datalist id="comps">${comps.map(c => `<option value="${esc(c)}">`).join('')}</datalist>
       <div class="row gap"><button class="btn" type="submit">${edit ? 'Save changes' : 'Add fixture'}</button>${edit ? '<a class="btn ghost" href="#/admin">Cancel</a>' : ''}</div></form>`;
@@ -367,7 +384,7 @@
   function onSaveFixture(form) {
     const id = form.dataset.id ? +form.dataset.id : 0;
     const data = readFixture(form);
-    if (!data) { setFlash('error', id ? 'All required fields must be filled.' : 'Home team, away team, competition and kickoff are required.'); render(); return; }
+    if (!data || data.error) { setFlash('error', data?.error || (id ? 'All required fields must be filled.' : 'Home team, away team, competition and kickoff are required.')); render(); return; }
     if (id) {
       const f = state.fixtures.find(x => x.id === id);
       if (!f) return;
@@ -457,12 +474,32 @@
     go('#' + safeNext(form.next.value || ''));
   }
 
+  function refreshAdvisor() {
+    const cur = document.querySelector('[data-advisor]');
+    if (!cur) return;
+    const open = cur.classList.contains('open');
+    const box = document.createElement('div');
+    box.innerHTML = AD.render({ loggedIn: !!currentUser(), picks: openSlip(currentUser()) });
+    const next = box.firstElementChild;
+    if (!next) return;
+    if (open) { next.classList.add('open'); next.querySelector('.advisor-toggle')?.setAttribute('aria-expanded', 'true'); }
+    cur.replaceWith(next);
+  }
+
   document.addEventListener('click', e => {
     const theme = e.target.closest('#theme');
     if (theme) {
       const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
       document.documentElement.dataset.theme = t;
       try { localStorage.theme = t; } catch (err) { /* ignore */ }
+      return;
+    }
+    const tog = e.target.closest('.advisor-toggle');
+    if (tog) {
+      if (matchMedia('(min-width:1040px)').matches) return;
+      const panel = tog.closest('.advisor');
+      const open = panel.classList.toggle('open');
+      tog.setAttribute('aria-expanded', open ? 'true' : 'false');
       return;
     }
     const opt = e.target.closest('.mkt .opt');
@@ -481,6 +518,7 @@
       else state.picks.push({ id: state.nextId++, user_id: user.id, fixture_id: f.id, market, selection: sel, status: null, points: null });
       save();
       form.querySelectorAll('.opt').forEach(o => { const on = o.value === selected; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+      refreshAdvisor();
       return;
     }
     const btn = e.target.closest('[data-action]');

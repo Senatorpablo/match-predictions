@@ -18,8 +18,9 @@ const fx = [
 ];
 const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2', DEF = '1X2,DC,OU25,BTTS';
 const mk = i => [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB', DEF, '1X2,OU25,BTTS', DEF][i];
-const ins = db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,home_score,away_score,ht_home,ht_away,markets,is_example) VALUES(?,?,?,?,?,?,?,?,?,?,1)');
-const ids = fx.map((f, i) => ins.run(f[0], f[1], f[2], iso(f[3], f[4]), f[5], f[6] ?? null, f[7] ?? null, f[8] ?? null, f[9] ?? null, mk(i)).lastInsertRowid);
+const forms = [['WWDLW','LDWLL',8,4],['WDLWD','WDLWD',6,6],['WWWWD','LLLLD',9,3],['WDWLW','DWLLD',7,5],[null,null,null,null],['DLLWW','WWLDW',4,8],['DWDWL','LWDWL',5,5],['WWWWW','LLLLL',9,2],['WLWDW','DLWDL',6,6]];
+const ins = db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,home_score,away_score,ht_home,ht_away,markets,home_form,away_form,home_strength,away_strength,is_example) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)');
+const ids = fx.map((f, i) => ins.run(f[0], f[1], f[2], iso(f[3], f[4]), f[5], f[6] ?? null, f[7] ?? null, f[8] ?? null, f[9] ?? null, mk(i), forms[i][0], forms[i][1], forms[i][2], forms[i][3]).lastInsertRowid);
 const users = [['Tunde (demo)','tunde@example.com'],['Amara (demo)','amara@example.com'],['Chris (demo)','chris@example.com']];
 const pw = bcrypt.hashSync('demo1234', 10);
 const uids = users.map(([n, e]) => db.prepare('INSERT OR IGNORE INTO users(name,email,password_hash) VALUES(?,?,?)').run(n, e, pw) && db.prepare('SELECT id FROM users WHERE email=?').get(e).id);

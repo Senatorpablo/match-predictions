@@ -88,3 +88,21 @@ footer{padding:48px 22px 36px;text-align:center}
 .picklist{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.pk{font-size:.78rem;padding:4px 6px 4px 12px;border-radius:999px;background:var(--input);border:1px solid var(--card-b);display:inline-flex;align-items:center;gap:4px}
 @media(max-width:400px){.opt span{font-size:.62rem}.mkt-pick{grid-template-columns:1fr}.wrap{padding:0 16px}}
 .admin-row .predict.tight.ht{order:3;flex-basis:100%;justify-content:flex-end;flex-wrap:wrap}.admin-row .predict.tight.ht input{width:56px}
+.page-split{display:block}.page-main{min-width:0}
+.advisor{padding:0;overflow:hidden;margin:0 0 18px}
+.advisor-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.advisor-toggle b{display:block;font-size:1rem}.advisor-chev{font-size:1.1rem;color:var(--muted);transition:transform .15s}
+.advisor.open .advisor-chev{transform:rotate(180deg)}
+.advisor-body{padding:0 18px 18px}
+.advisor-note{margin:0 0 12px;padding:10px 12px;border-radius:14px;background:#e7f7ee;color:#0c6b38;font-size:.84rem;font-weight:700}
+[data-theme=dark] .advisor-note{background:rgba(125,255,168,.12);color:var(--green)}
+.meter-wrap{margin-bottom:4px}.meter{height:10px;border-radius:999px;background:var(--input);border:1px solid var(--card-b);overflow:hidden;margin-top:6px}
+.meter span{display:block;height:100%;background:#0f7a40;border-radius:999px}
+.adv-item{padding:12px 0;border-top:1px solid var(--card-b)}.adv-item p{margin:6px 0 0}
+.pill.adv-strong{background:#e7f7ee;color:#0c6b38;border-color:#b7e4c9}.pill.adv-fair{background:#fff7e8;color:#8a5a00;border-color:#f3e0b8}.pill.adv-risky{background:#fff1f3;color:#b42348;border-color:#fecdd6}
+[data-theme=dark] .pill.adv-strong{background:rgba(125,255,168,.12);color:var(--green);border-color:rgba(125,255,168,.28)}
+[data-theme=dark] .pill.adv-fair{background:rgba(246,212,138,.12);color:var(--gold);border-color:rgba(246,212,138,.28)}
+[data-theme=dark] .pill.adv-risky{background:rgba(251,113,133,.12);color:var(--red);border-color:rgba(251,113,133,.3)}
+.advisor-fields{display:flex;flex-direction:column;gap:12px}
+@media(max-width:1039px){.advisor:not(.open) .advisor-body{display:none}.page-split{display:flex;flex-direction:column}.advisor{order:-1}}
+@media(min-width:1040px){.page-split{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:28px;align-items:start}.advisor{position:sticky;top:84px;margin:0}.advisor-body{display:block!important}.advisor-chev{display:none}.advisor-toggle{cursor:default}}

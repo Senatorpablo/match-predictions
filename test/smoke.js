@@ -11,6 +11,41 @@ assert.strictEqual(M.settle('1X2', '1', { home_score: null, away_score: null }).
 assert.strictEqual(M.settle('CS', '1-0', f(2, 1)).status, null);
 assert.ok(!M.MARKETS.CS && !M.ORDER.includes('CS') && !M.DEFAULT.includes('CS'));
 assert.deepStrictEqual(M.list(null), M.DEFAULT); assert.deepStrictEqual(M.list('CS,1X2,bogus'), ['1X2']);
+const A = require('../public/advisor.js');
+assert.strictEqual(A.cleanForm('wwxdlw'), 'WWDLW');
+assert.strictEqual(A.cleanForm(''), null);
+assert.strictEqual(A.cleanStrength(''), null);
+assert.strictEqual(A.cleanStrength('8'), 8);
+assert.strictEqual(A.cleanStrength('11'), false);
+const fav = { home_team: 'Arsenal', away_team: 'Chelsea', home_form: 'WWWWW', away_form: 'LLLLL', home_strength: 9, away_strength: 2 };
+const favA = A.assess(fav);
+assert.deepStrictEqual(favA.probs, A.assess(fav).probs);
+const p1 = favA.probs['1X2'];
+assert.ok(Math.abs(p1['1'] + p1.X + p1['2'] - 1) < 1e-6);
+assert.ok(p1['1'] > 0.55 && p1['1'] > p1['2']);
+assert.strictEqual(A.rate(fav, '1X2', '1').rating, 'Strong');
+assert.strictEqual(A.rate(fav, '1X2', '2').rating, 'Risky');
+assert.ok(Math.abs(favA.probs.OU25.O + favA.probs.OU25.U - 1) < 1e-6);
+assert.strictEqual(favA.probs.DNB['1'], p1['1']);
+const blank = A.assess({ home_team: 'A', away_team: 'B' });
+assert.ok(blank.probs['1X2']['1'] > blank.probs['1X2']['2']);
+assert.strictEqual(blank.homeStrength, 5);
+assert.ok(blank.homeDefaultForm && blank.homeDefaultStr);
+const slip = A.slip([
+  { ...fav, market: '1X2', selection: '1' },
+  { ...fav, market: '1X2', selection: '2', home_score: null },
+  { ...fav, market: '1X2', selection: '1', home_score: 2 }
+]);
+assert.strictEqual(slip.rated.length, 2);
+assert.strictEqual(slip.summary, 'Balanced: 1 safe, 1 risky');
+const agg = A.slip([{ ...fav, market: '1X2', selection: '2' }, { ...fav, market: '1X2', selection: 'X' }]);
+assert.ok(agg.summary.startsWith('Aggressive:') && agg.summary.includes('2 risky'));
+assert.ok(slip.confidence > 0 && slip.confidence < 100);
+const panel = A.render({ loggedIn: true, picks: [{ ...fav, market: '1X2', selection: '1' }, { ...fav, market: 'OU25', selection: 'U' }] });
+assert.ok(panel.includes('Pick advisor') && /not a guarantee/i.test(panel) && /no real money/i.test(panel));
+assert.ok(panel.includes('Strong') || panel.includes('Fair') || panel.includes('Risky'));
+assert.ok(panel.includes('role="meter"'));
+assert.ok(!A.render({ loggedIn: false, picks: [{ ...fav, market: '1X2', selection: '1' }] }).includes('Arsenal vs Chelsea'));
 // DB + migration: build an old-schema DB, then load the app's db module against it
 const dbp = path.join(os.tmpdir(), `mp-smoke-${process.pid}.db`); [dbp, dbp + '-wal', dbp + '-shm'].forEach(p => fs.rmSync(p, { force: true }));
 const Old = require('better-sqlite3')(dbp);
@@ -25,6 +60,7 @@ const D = require('../db');
 assert.deepStrictEqual(Object.keys(D.settings()), ['markets']);
 assert.ok(!('exact' in D.settings()) && !('outcome' in D.settings()));
 assert.strictEqual(D.db.prepare('SELECT markets FROM fixtures').get().markets, M.DEFAULT.join(','));
+assert.ok(['home_form', 'away_form', 'home_strength', 'away_strength'].every(c => D.db.prepare('PRAGMA table_info(fixtures)').all().some(x => x.name === c)));
 const kept = D.db.prepare('SELECT home_goals,away_goals,points FROM predictions').get();
 assert.deepStrictEqual(kept, { home_goals: 2, away_goals: 1, points: null });
 D.db.prepare("INSERT INTO picks(user_id,fixture_id,market,selection) VALUES(1,1,'1X2','1'),(1,1,'BTTS','Y'),(1,1,'DNB','2')").run();
@@ -39,9 +75,13 @@ const app = require('../server'); const srv = app.listen(0, async () => {
     const pages = await Promise.all(['/', '/fixtures', '/fixtures?tab=results', '/leaderboard', '/markets.js'].map(async u => [u, await (await fetch(base + u)).text()]));
     for (const [u, html] of pages) assert.ok(!/correct score|exact score|points_exact|name="home"/i.test(html), u);
     assert.ok(pages.find(([u]) => u === '/fixtures?tab=results')[1].includes('class="mkts'));
+    const fxHtml = pages.find(([u]) => u === '/fixtures')[1];
+    assert.ok(fxHtml.includes('Pick advisor') && /not a guarantee/i.test(fxHtml) && /no real money/i.test(fxHtml));
+    assert.strictEqual((await fetch(base + '/advisor.js')).status, 200);
     const V = require('../views');
     const adminHtml = V.admin({ fx: [{ id: 1, home_team: 'A', away_team: 'B', competition: 'L', kickoff: '2020-01-01T00:00:00Z', home_score: 2, away_score: 1, ht_home: 1, ht_away: 0, markets: '1X2,HT1X2,CS', n: 0 }], edit: { markets: '1X2,CS' }, s: D.settings(), counts: { users: 1 } });
     assert.ok(adminHtml.includes('name="home_score"') && adminHtml.includes('name="ht_home"'));
+    assert.ok(adminHtml.includes('name="home_form"') && adminHtml.includes('name="home_strength"') && adminHtml.includes('name="away_strength"'));
     assert.ok(!/correct score|exact score|points_exact|value="CS"/i.test(adminHtml));
     assert.ok(adminHtml.includes('Match Result') && adminHtml.includes('1st Half Result'));
     console.log('Smoke test passed ✓'); } catch (e) { console.error(e); process.exitCode = 1; }

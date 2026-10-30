@@ -24,6 +24,7 @@ Admins can promote other users from **Admin → Users**.
 - My picks shows history, points, rank and accuracy. The leaderboard has a podium.
 - Admin can add, edit and delete fixtures (team, competition, local kickoff time, venue, which markets are open) and set or clear the final score. 1st Half Result also takes a half-time score. Points are recalculated automatically.
 - Points per market are configurable. Changing them recalculates all points.
+- Pick advisor, on Fixtures and My picks, rates each open pick Strong, Fair or Risky from optional last-5 form and strength (1–10). It is guidance only, not a guarantee, and there is no real money.
 - Bright light theme by default, with an optional dark toggle, plus the Inter font, micro-animations, team initial badges and empty states
 - PWA: `manifest.json`, service worker with offline page, and icons. To install, use "Add to Home Screen". HTTPS is required in production.
 
