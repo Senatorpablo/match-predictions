@@ -1,5 +1,7 @@
 const M = require('./public/markets.js');
 const A = require('./public/advisor.js');
+const O = require('./public/odds.js');
+const oddsProvider = O.createOddsProvider({ assess: x => A.assess(x), env: process.env });
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const hue = s => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 const initials = n => String(n).replace(/\(.*?\)/g, '').split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 3).toUpperCase();
@@ -12,10 +14,11 @@ const ptsPill = p => p == null ? '<span class="pill">Pending</span>' : `<span cl
 
 function layout({ title, body, user, flash, active }) {
   const nav = [['home', '/', 'Home'], ['fixtures', '/fixtures', 'Fixtures'], ['leaderboard', '/leaderboard', 'Leaderboard']];
+  if (user) nav.push(['slips', '/slips', 'Slips']);
   if (user) nav.push(['me', '/me', 'My picks']);
   if (user?.is_admin) nav.push(['admin', '/admin', 'Admin']);
   const links = nav.map(([k, h, l]) => `<a href="${h}" class="${k === active ? 'on' : ''}">${l}</a>`).join('');
-  const icons = { home: '⌂', fixtures: '⚽', leaderboard: '🏆', me: '★', admin: '⚙' };
+  const icons = { home: '⌂', fixtures: '⚽', leaderboard: '🏆', slips: '▤', me: '★', admin: '⚙' };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(title)} · Matchday</title><meta name="theme-color" content="#f6f7f4"><meta name="description" content="Pick match markets and climb the leaderboard.">
 <link rel="manifest" href="/manifest.json"><link rel="icon" href="/icons/icon-192.png"><link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -33,9 +36,9 @@ ${user ? `<form method="post" action="/logout"><button class="btn ghost sm">Log 
 <script src="/app.js" defer></script></body></html>`;
 }
 
-const fixtureCard = (f, user, picks, s) => {
+const fixtureCard = (f, user, picks, s, draft) => {
   const done = f.home_score != null, live = isPast(f);
-  const mk = picks === false ? '' : M.render(f, picks || {}, { open: !!user && !done && !live, action: '/pick/' + f.id, pts: s?.markets });
+  const mk = picks === false ? '' : M.render(f, picks || {}, { open: !!user && !done && !live, action: '/pick/' + f.id, pts: s?.markets, quote: (m, sel) => oddsProvider.quote(f, m, sel), draft: draft || {} });
   let action;
   if (done) action = `<div class="result"><b>${f.home_score}</b><span>FT</span><b>${f.away_score}</b></div>`;
   else action = `<div class="vs">${live ? '<span class="pill red pulse">Locked</span>' : '<span class="vs-txt">VS</span>'}</div>`;
@@ -61,7 +64,8 @@ function home({ user, upcoming, results, top, stats }) {
   <div class="card list">${results.length ? results.map(f => `<div class="lrow">${badge(f.home_team, 'sm')}<span class="grow small">${esc(f.home_team)}</span><b class="score">${f.home_score} – ${f.away_score}</b><span class="grow small right">${esc(f.away_team)}</span>${badge(f.away_team, 'sm')}</div>`).join('') : '<p class="muted pad">Results will appear here after matches.</p>'}</div></section></div>`;
 }
 
-function fixtures({ fx, picks = {}, user, tab, s, slip }) {
+const rail = (user, legs, balance, slip) => `<div class="rail">${O.renderSlip({ loggedIn: !!user, balance: balance || 0, legs: legs || [] })}${A.render({ loggedIn: !!user, picks: slip || [], ticket: legs || [] })}</div>`;
+function fixtures({ fx, picks = {}, user, tab, s, slip, legs, draft = {}, balance }) {
   const up = fx.filter(f => f.home_score == null && !isPast(f)), lk = fx.filter(f => f.home_score == null && isPast(f)), res = fx.filter(f => f.home_score != null).reverse();
   const lists = { upcoming: up, live: lk, results: res };
   const cur = lists[tab] ? tab : 'upcoming';
@@ -70,11 +74,11 @@ function fixtures({ fx, picks = {}, user, tab, s, slip }) {
   const groups = {}; list.forEach(f => (groups[f.competition] ||= []).push(f));
   return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
   <div class="tabs">${tabs.map(([k, l, n]) => `<a href="?tab=${k}" class="${k === cur ? 'on' : ''}">${l} <span>${n}</span></a>`).join('')}</div>
-  ${list.length ? Object.entries(groups).map(([c, l]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${l.map(f => fixtureCard(f, user, picks[f.id], s)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}</div>
-  ${A.render({ loggedIn: !!user, picks: slip || [] })}</div>`;
+  ${list.length ? Object.entries(groups).map(([c, l]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${l.map(f => fixtureCard(f, user, picks[f.id], s, draft[f.id])).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}</div>
+  ${rail(user, legs, balance, slip)}</div>`;
 }
 
-function me({ user, picks = [], rank, total, me, slip }) {
+function me({ user, picks = [], rank, total, me, slip, legs, balance }) {
   const shown = picks.filter(k => M.MARKETS[k.market]);
   const settled = shown.filter(k => k.status && k.status !== 'void');
   const acc = settled.length ? Math.round(100 * settled.filter(r => r.points > 0).length / settled.length) : 0;
@@ -90,14 +94,14 @@ function me({ user, picks = [], rank, total, me, slip }) {
   <div class="picklist">${items.map(i => `<span class="pk ${i.st || ''}"><span class="muted">${esc(i.m)}</span> <b>${esc(i.sel)}</b> ${stPill(i)}</span>`).join('')}</div></div>
   <div class="right">${ptsPill(pend ? null : tot)}</div></div>`; }).join('')}</div>`
     : empty('🎯', 'No picks yet', 'Open a fixture and tap a market.', '<a class="btn" href="/fixtures">Go to fixtures</a>')}</div>
-  ${A.render({ loggedIn: true, picks: slip || [] })}</div>`;
+  ${rail(user, legs, balance ?? user.balance, slip)}</div>`;
 }
 
 function leaderboard({ rows, user }) {
   const pod = rows.slice(0, 3);
   return `<div class="page-h"><h1>Leaderboard</h1><p class="muted">Points from every market you pick.</p></div>
   ${rows.length ? `<div class="podium">${[1, 0, 2].filter(i => pod[i]).map(i => `<div class="pod p${i + 1}">${badge(pod[i].name, 'xl')}<b>${esc(pod[i].name)}</b><span class="pts">${pod[i].pts} pts</span><div class="step">${i + 1}</div></div>`).join('')}</div>
-  <div class="card list">${rows.map((r, i) => `<div class="lrow ${user?.id === r.id ? 'me' : ''}"><span class="rank r${i + 1}">${i + 1}</span>${badge(r.name)}<span class="grow">${esc(r.name)}${user?.id === r.id ? ' <span class="pill green">You</span>' : ''}</span><span class="muted small hide-sm">${r.won} won · ${r.played} settled</span><b>${r.pts}</b></div>`).join('')}</div>`
+  <div class="card list">${rows.map((r, i) => `<div class="lrow ${user?.id === r.id ? 'me' : ''}"><span class="rank r${i + 1}">${i + 1}</span>${badge(r.name)}<span class="grow">${esc(r.name)}${user?.id === r.id ? ' <span class="pill green">You</span>' : ''}</span><span class="muted small hide-sm">${r.won} won · ${r.played} settled${r.slip_n ? ` · slip ${r.slip_net >= 0 ? '+' : ''}${r.slip_net}` : ''}</span><b>${r.pts}</b></div>`).join('')}</div>`
     : empty('🏆', 'The table is empty', 'Sign up and make predictions to get on the board.', '<a class="btn" href="/signup">Join now</a>')}`;
 }
 
@@ -121,6 +125,7 @@ function admin({ fx, edit, s, counts }) {
    <div class="advisor-fields"><p class="muted small" style="margin:0">Advisor form, optional. Last 5 is oldest to newest (WWDLW). Blank uses a neutral default.</p>
    <div class="grid-2"><label>Home last 5<input name="home_form" maxlength="5" placeholder="WWDLW" value="${v('home_form')}" autocapitalize="characters"></label><label>Away last 5<input name="away_form" maxlength="5" placeholder="LDWLL" value="${v('away_form')}" autocapitalize="characters"></label></div>
    <div class="grid-2"><label>Home strength 1–10<input type="number" name="home_strength" min="1" max="10" placeholder="5" value="${edit?.home_strength ?? ''}"></label><label>Away strength 1–10<input type="number" name="away_strength" min="1" max="10" placeholder="5" value="${edit?.away_strength ?? ''}"></label></div></div>
+   <details class="odds-fields"><summary>Optional odds <span class="muted">blank = estimated, 1.05–15</span></summary><div class="odds-grid">${M.ORDER.map(k => `<div class="odds-row"><span>${esc(M.MARKETS[k].short)}</span>${M.MARKETS[k].opts.map(([sel, lab]) => `<label>${esc(lab)}<input type="number" name="odd_${k}_${sel}" min="1.05" max="15" step="0.01" placeholder="Est." value="${esc((O.parseOdds(edit?.option_odds)[k] || {})[sel] ?? '')}"></label>`).join('')}</div>`).join('')}</div></details>
    <fieldset class="mkt-pick"><legend>Markets players can pick</legend>${M.ORDER.map(k => `<label class="chk"><input type="checkbox" name="markets" value="${k}" ${M.list(edit?.markets).includes(k) ? 'checked' : ''}><span>${esc(M.MARKETS[k].name)}</span></label>`).join('')}</fieldset>
    <input type="hidden" name="kickoff_iso"><datalist id="comps">${[...new Set(fx.map(f => f.competition))].map(c => `<option value="${esc(c)}">`).join('')}</datalist>
    <div class="row gap"><button class="btn">${edit ? 'Save changes' : 'Add fixture'}</button>${edit ? '<a class="btn ghost" href="/admin">Cancel</a>' : ''}</div></form>`;
@@ -129,7 +134,7 @@ function admin({ fx, edit, s, counts }) {
    <div class="row gap"><a class="icon-btn" href="/admin?edit=${f.id}#top" title="Edit">✎</a>${f.home_score != null ? `<form method="post" action="/admin/fixtures/${f.id}/result"><input type="hidden" name="clear" value="1"><button class="icon-btn" title="Clear result">↺</button></form>` : ''}<form method="post" action="/admin/fixtures/${f.id}/delete" data-confirm="Delete this fixture and its predictions?"><button class="icon-btn danger" title="Delete">🗑</button></form></div></div>`;
   return `<div class="page-h row between wrapr" id="top"><div><h1>Admin</h1><p class="muted">Manage fixtures, results and scoring.</p></div><a class="btn ghost" href="/admin/users">Users (${counts.users})</a></div>
   <div class="grid2 admin-grid"><div>${form}
-  <form method="post" action="/admin/settings" class="card stack"><h3>Scoring rules</h3><p class="muted small" style="margin:0">Points awarded when a pick wins. Draw No Bet is void (0) on a draw.</p><div class="grid-3">${Object.keys(s.markets).map(k => `<label>${esc(M.MARKETS[k].name)}<input type="number" name="pts_${k}" min="0" max="99" value="${s.markets[k]}"></label>`).join('')}</div><button class="btn ghost">Save & recalculate</button></form></div>
+  <form method="post" action="/admin/settings" class="card stack"><h3>Scoring rules</h3><p class="muted small" style="margin:0">Points awarded when a pick wins. Draw No Bet is void (0) on a draw. Starting balance applies to new players.</p><div class="grid-3">${Object.keys(s.markets).map(k => `<label>${esc(M.MARKETS[k].name)}<input type="number" name="pts_${k}" min="0" max="99" value="${s.markets[k]}"></label>`).join('')}<label>Starting slip points<input type="number" name="starting_balance" min="1" max="100000" value="${s.startingBalance ?? 1000}"></label></div><button class="btn ghost">Save & recalculate</button></form></div>
   <div><div class="sec-h"><h2>All fixtures</h2><span class="muted small">${fx.length} total</span></div>${fx.length ? `<div class="card list">${fx.map(row).join('')}</div>` : empty('📋', 'No fixtures yet', 'Add your first fixture using the form.')}</div></div>`;
 }
 
@@ -138,4 +143,9 @@ function users({ users, me }) {
   <div class="card list">${users.map(u => `<div class="lrow">${badge(u.name)}<div class="grow"><b>${esc(u.name)}</b> ${u.is_admin ? '<span class="pill gold">Admin</span>' : ''}<div class="small muted">${esc(u.email)} · joined ${esc(u.created_at.slice(0, 10))}</div></div><span class="small muted hide-sm">${u.n} picks</span><b>${u.pts}</b><span class="muted small">pts</span>
   ${u.id !== me.id ? `<form method="post" action="/admin/users/${u.id}/toggle-admin"><button class="btn ghost sm">${u.is_admin ? 'Revoke admin' : 'Make admin'}</button></form>` : ''}</div>`).join('')}</div>`;
 }
-module.exports = { layout, home, fixtures, me, leaderboard, auth, admin, users, empty };
+function slips({ user, rows, legs, slip }) {
+  const st = s => s === 'won' ? 'green' : s === 'lost' ? 'red' : '';
+  const list = rows.length ? `<div class="card list">${rows.map(s => `<div class="lrow hist"><div class="grow"><div class="row between"><b>${esc(s.status)}</b><span class="pill ${st(s.status)}">${s.payout ? '+' + s.payout : s.status === 'open' ? 'Open' : '0'}</span></div><div class="small muted">Stake ${s.stake} · ${Number(s.combined_odds).toFixed(2)}× · return ${s.potential} if every leg wins</div><div class="picklist">${s.legs.map(l => `<span class="pk ${l.status || ''}"><span class="muted">${esc(l.home_team)} vs ${esc(l.away_team)} · ${esc(M.MARKETS[l.market]?.short || l.market)}</span> <b>${esc(M.label(l.market, l.selection))}</b> <span class="odd-src">${Number(l.odds).toFixed(2)} ${esc(O.shortSource(l.source))}</span> ${l.status ? `<span class="pill xs">${esc(l.status)}</span>` : ''}</span>`).join('')}</div></div></div>`).join('')}</div>` : empty('▤', 'No slips placed yet', 'Build one from the fixtures page. Points only — no real money.', '<a class="btn" href="/fixtures">Go to fixtures</a>');
+  return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Slips</h1><p class="muted">Balance <b>${user.balance} pts</b>. Combined slips use a points stake. A losing leg loses the stake. This is not real money.</p></div>${list}</div>${rail(user, legs, user.balance, slip)}</div>`;
+}
+module.exports = { layout, home, fixtures, me, leaderboard, auth, admin, users, slips, empty };

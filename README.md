@@ -24,7 +24,8 @@ Admins can promote other users from **Admin → Users**.
 - My picks shows history, points, rank and accuracy. The leaderboard has a podium.
 - Admin can add, edit and delete fixtures (team, competition, local kickoff time, venue, which markets are open) and set or clear the final score. 1st Half Result also takes a half-time score. Points are recalculated automatically.
 - Points per market are configurable. Changing them recalculates all points.
-- Pick advisor, on Fixtures and My picks, rates each open pick Strong, Fair or Risky from optional last-5 form and strength (1–10). It is guidance only, not a guarantee, and there is no real money.
+- Pick advisor, on Fixtures and My picks, rates each open pick and the combined slip Strong, Fair or Risky from optional last-5 form and strength (1–10). It is guidance only, not a guarantee, and there is no real money.
+- Combined slip: each option shows decimal odds (set by an admin, or estimated from the advisor — never claimed as live bookmaker prices). Tap prices across matches, stake virtual points (new players start with 1,000, changeable in Admin), and the slip wins only if every leg wins. A void leg counts as 1.00. Single-pick points and the leaderboard stay as they are; slip results also show on the leaderboard and on the Slips tab.
 - Bright light theme by default, with an optional dark toggle, plus the Inter font, micro-animations, team initial badges and empty states
 - PWA: `manifest.json`, service worker with offline page, and icons. To install, use "Add to Home Screen". HTTPS is required in production.
 
@@ -36,6 +37,7 @@ Admins can promote other users from **Admin → Users**.
 | SESSION_SECRET | auto-generated in `data/.session-secret` | set it in production |
 | DB_PATH | `data/app.db` | point it at a persistent disk |
 | NODE_ENV=production | | marks cookies as Secure (requires HTTPS) |
+| ODDS_API_KEY | unset | optional later hook for a bookmaker odds API; the app does not call out or require a key |
 
 To remove the demo data, delete the fixtures marked "Example" in Admin. For a clean slate, delete the `data/` folder.
 

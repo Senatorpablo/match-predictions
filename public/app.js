@@ -13,6 +13,8 @@
   // One-tap market picks without a page reload (falls back to normal form post).
   const deskAdvisor = () => matchMedia('(min-width:1040px)').matches;
   document.addEventListener('click', e => {
+    if (e.target.closest('[data-slip-open]')) { document.querySelector('[data-slip]')?.classList.add('open'); return; }
+    if (e.target.closest('[data-slip-close]')) { document.querySelector('[data-slip]')?.classList.remove('open'); return; }
     const tog = e.target.closest('.advisor-toggle');
     if (tog) {
       if (deskAdvisor()) return;
@@ -26,8 +28,16 @@
     fetch(form.action, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, credentials: 'same-origin',
       body: new URLSearchParams({ market: form.market.value, selection: b.value }) })
       .then(r => r.json()).then(j => { if (!j.ok) throw new Error(j.error); form.querySelectorAll('.opt').forEach(o => { const on = o.value === j.selection; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
-        if (j.advisor) { const cur = document.querySelector('[data-advisor]'); if (cur) { const open = cur.classList.contains('open'); const box = document.createElement('div'); box.innerHTML = j.advisor; const next = box.firstElementChild; if (open) { next.classList.add('open'); next.querySelector('.advisor-toggle')?.setAttribute('aria-expanded', 'true'); } cur.replaceWith(next); } } })
+        if (j.advisor) { const cur = document.querySelector('[data-advisor]'); if (cur) { const open = cur.classList.contains('open'); const box = document.createElement('div'); box.innerHTML = j.advisor; const next = box.firstElementChild; if (open) { next.classList.add('open'); next.querySelector('.advisor-toggle')?.setAttribute('aria-expanded', 'true'); } cur.replaceWith(next); } }
+        if (j.slip) { const cur = document.querySelector('[data-slip]'); if (cur) { const open = cur.classList.contains('open'); const box = document.createElement('div'); box.innerHTML = j.slip; const next = box.firstElementChild; if (open) next.classList.add('open'); cur.replaceWith(next); } } })
       .catch(err => alert(err.message || 'Could not save your pick.')).finally(() => b.classList.remove('busy'));
+  });
+  document.addEventListener('input', e => {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches('[data-stake]')) return;
+    const form = input.closest('form');
+    const out = form?.querySelector('[data-return]');
+    if (out) out.textContent = String(Math.round((Number(input.value) || 0) * (Number(form.dataset.mult) || 0)));
   });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 })();

@@ -156,16 +156,34 @@
     return SEL[sel] || sel;
   }
 
+  function rateAccumulator(legs) {
+    const list = (legs || []).filter(l => l && NAMES[l.market] && l.home_score == null);
+    if (!list.length) return null;
+    let surviveAll = 1;
+    for (const leg of list) {
+      const info = assess(leg);
+      const win = (info.probs[leg.market] && info.probs[leg.market][leg.selection]) || 0;
+      const draw = (info.probs['1X2'] && info.probs['1X2'].X) || 0;
+      const survive = leg.market === 'DNB' ? Math.min(1, win + draw) : win;
+      surviveAll *= survive;
+    }
+    const rating = ratingOf(surviveAll);
+    const pct = Math.round(surviveAll * 100);
+    return { probability: surviveAll, rating, confidence: pct, count: list.length, reason: `The chance every leg survives is about ${pct}%. ${rating === 'Risky' ? 'One losing leg loses the whole stake.' : 'That is a relatively steady combined slip.'}` };
+  }
+
   function render(opts) {
     const loggedIn = !!(opts && opts.loggedIn);
     const pack = slip(loggedIn ? opts.picks : []);
+    const acc = loggedIn ? rateAccumulator(opts.ticket || opts.picks) : null;
+    const accHtml = acc ? `<div class="adv-item"><div class="row between gap"><div><b>Combined slip</b><div class="small muted">${acc.count} leg${acc.count === 1 ? '' : 's'} · ${acc.confidence}% survive</div></div><span class="pill adv-${acc.rating.toLowerCase()}">${acc.rating}</span></div><p class="small">${esc(acc.reason)}</p></div>` : '';
     const rows = pack.rated.map(r => `<div class="adv-item"><div class="row between gap"><div><b>${esc(r.pick.home_team)} vs ${esc(r.pick.away_team)}</b><div class="small muted">${esc(NAMES[r.market] || r.market)} · ${esc(selLabel(r.market, r.selection))}</div></div><span class="pill adv-${r.rating.toLowerCase()}">${r.rating}</span></div><p class="small">${esc(r.reason)}</p></div>`).join('');
     const empty = !loggedIn
       ? '<p class="small muted">Log in and tap a market. Each open pick is rated Strong, Fair or Risky.</p>'
       : '<p class="small muted">No open picks yet. Tap a market on an upcoming match and it will show up here.</p>';
     const head = !loggedIn ? 'Log in to rate your picks' : pack.summary;
-    return `<aside class="advisor card" data-advisor><button type="button" class="advisor-toggle" aria-expanded="false"><span><b>Pick advisor</b><span class="small muted">${esc(head)}</span></span><span class="advisor-chev" aria-hidden="true">▾</span></button><div class="advisor-body"><p class="advisor-note">Guidance only — not a guarantee, and no real money.</p><div class="meter-wrap"><div class="row between"><span class="small">Slip confidence</span><b>${pack.confidence}%</b></div><div class="meter" role="meter" aria-valuenow="${pack.confidence}" aria-valuemin="0" aria-valuemax="100" aria-label="Slip confidence"><span style="width:${pack.confidence}%"></span></div></div>${rows || empty}<p class="small muted">Last 5 is oldest to newest, like WWDLW. Blank form or strength uses a neutral default.</p></div></aside>`;
+    return `<aside class="advisor card" data-advisor><button type="button" class="advisor-toggle" aria-expanded="false"><span><b>Pick advisor</b><span class="small muted">${esc(head)}</span></span><span class="advisor-chev" aria-hidden="true">▾</span></button><div class="advisor-body"><p class="advisor-note">Guidance only — not a guarantee, and no real money.</p><div class="meter-wrap"><div class="row between"><span class="small">Pick confidence</span><b>${pack.confidence}%</b></div><div class="meter" role="meter" aria-valuenow="${pack.confidence}" aria-valuemin="0" aria-valuemax="100" aria-label="Pick confidence"><span style="width:${pack.confidence}%"></span></div></div>${accHtml}${rows || empty}<p class="small muted">Last 5 is oldest to newest, like WWDLW. Blank form or strength uses a neutral default. Odds on the slip are estimated or set by an admin — not live bookmaker prices.</p></div></aside>`;
   }
 
-  return { cleanForm, cleanStrength, assess, rate, slip, render, ratingOf };
+  return { cleanForm, cleanStrength, assess, rate, slip, rateAccumulator, render, ratingOf };
 });

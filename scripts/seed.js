@@ -19,11 +19,11 @@ const fx = [
 const ALL = '1X2,DC,OU15,OU25,OU35,BTTS,DNB,HT1X2', DEF = '1X2,DC,OU25,BTTS';
 const mk = i => [ALL, ALL, ALL, ALL, DEF, '1X2,DC,OU05,OU25,BTTS,DNB', DEF, '1X2,OU25,BTTS', DEF][i];
 const forms = [['WWDLW','LDWLL',8,4],['WDLWD','WDLWD',6,6],['WWWWD','LLLLD',9,3],['WDWLW','DWLLD',7,5],[null,null,null,null],['DLLWW','WWLDW',4,8],['DWDWL','LWDWL',5,5],['WWWWW','LLLLL',9,2],['WLWDW','DLWDL',6,6]];
-const ins = db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,home_score,away_score,ht_home,ht_away,markets,home_form,away_form,home_strength,away_strength,is_example) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)');
-const ids = fx.map((f, i) => ins.run(f[0], f[1], f[2], iso(f[3], f[4]), f[5], f[6] ?? null, f[7] ?? null, f[8] ?? null, f[9] ?? null, mk(i), forms[i][0], forms[i][1], forms[i][2], forms[i][3]).lastInsertRowid);
+const ins = db.prepare('INSERT INTO fixtures(home_team,away_team,competition,kickoff,venue,home_score,away_score,ht_home,ht_away,markets,home_form,away_form,home_strength,away_strength,option_odds,is_example) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)');
+const ids = fx.map((f, i) => ins.run(f[0], f[1], f[2], iso(f[3], f[4]), f[5], f[6] ?? null, f[7] ?? null, f[8] ?? null, f[9] ?? null, mk(i), forms[i][0], forms[i][1], forms[i][2], forms[i][3], i === 0 ? JSON.stringify({ '1X2': { '1': 1.72, X: 3.4, '2': 4.5 } }) : null).lastInsertRowid);
 const users = [['Tunde (demo)','tunde@example.com'],['Amara (demo)','amara@example.com'],['Chris (demo)','chris@example.com']];
 const pw = bcrypt.hashSync('demo1234', 10);
-const uids = users.map(([n, e]) => db.prepare('INSERT OR IGNORE INTO users(name,email,password_hash) VALUES(?,?,?)').run(n, e, pw) && db.prepare('SELECT id FROM users WHERE email=?').get(e).id);
+const uids = users.map(([n, e]) => db.prepare('INSERT OR IGNORE INTO users(name,email,password_hash,balance) VALUES(?,?,?,1000)').run(n, e, pw) && db.prepare('SELECT id FROM users WHERE email=?').get(e).id);
 // Market picks: [fixtureIndex, market, selection] per demo user
 const mp = [
   [[0,'1X2','1'],[0,'OU25','O'],[0,'BTTS','Y'],[1,'DNB','1'],[1,'DC','X2'],[1,'HT1X2','X'],[2,'1X2','1'],[2,'BTTS','N'],[3,'1X2','X'],[3,'OU25','O']],
@@ -31,6 +31,7 @@ const mp = [
   [[0,'1X2','2'],[0,'BTTS','N'],[1,'OU15','O'],[1,'DNB','2'],[2,'DC','1X'],[2,'OU35','U'],[3,'1X2','2']],
 ];
 const kp = db.prepare('INSERT OR IGNORE INTO picks(user_id,fixture_id,market,selection) VALUES(?,?,?,?)');
-uids.forEach((u, i) => mp[i].forEach(([j, m, s]) => kp.run(u, ids[j], m, s)));
+const draft = db.prepare('INSERT OR IGNORE INTO draft_legs(user_id,fixture_id,market,selection) VALUES(?,?,?,?)');
+uids.forEach((u, i) => mp[i].forEach(([j, m, s]) => { kp.run(u, ids[j], m, s); if (fx[j][6] == null) draft.run(u, ids[j], m, s); }));
 ids.slice(0, 3).forEach(recompute);
 console.log(`Seeded ${ids.length} EXAMPLE fixtures and ${users.length} demo users (password: demo1234).`);

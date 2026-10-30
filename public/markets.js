@@ -1,4 +1,4 @@
-/* Shared market definitions + settlement. Points-only game: no odds, no money. Works in Node and the browser. */
+/* Shared market definitions + settlement. Points-only game: no cash stakes. Works in Node and the browser. */
 (function (root, factory) { if (typeof module === 'object' && module.exports) module.exports = factory(); else root.Markets = factory(); })(this, function () {
   const sgn = n => Math.sign(n);
   const res = (h, a) => (h > a ? '1' : h < a ? '2' : 'X');
@@ -38,8 +38,11 @@
       const m = MARKETS[k], mine = picks[k];
       let win = null; if (done) { const t = m.opts.find(x => m.settle(x[0], f) === 'won'); win = t ? t[0] : null; }
       const btns = m.opts.map(([v, l]) => {
-        const on = mine && mine.selection === v, cls = ['opt', on ? 'on' : '', on && mine.status ? mine.status : '', win === v ? 'hit' : ''].filter(Boolean).join(' ');
-        return `<button class="${cls}" name="selection" value="${escH(v)}" ${o.open ? '' : 'disabled'} aria-pressed="${on ? 'true' : 'false'}" title="${escH(m.name + ': ' + l)}"><b>${escH(v === 'Y' ? 'GG' : v === 'N' ? 'NG' : v)}</b><span>${escH(l)}</span></button>`;
+        const on = mine && mine.selection === v, inSlip = o.draft && o.draft[k] === v, cls = ['opt', on ? 'on' : '', inSlip ? 'in-slip' : '', on && mine.status ? mine.status : '', win === v ? 'hit' : ''].filter(Boolean).join(' ');
+        const q = o.quote ? o.quote(k, v) : null;
+        const price = q ? `<em class="odd">${Number(q.decimal).toFixed(2)}</em><i class="odd-src">${q.source === 'admin' ? 'Admin' : 'Est.'}</i>` : '';
+        const srcTitle = q ? (q.source === 'admin' ? 'Set by admin' : 'Estimated') : '';
+        return `<button class="${cls}" name="selection" value="${escH(v)}" ${o.open ? '' : 'disabled'} aria-pressed="${on ? 'true' : 'false'}" title="${escH(m.name + ': ' + l + (srcTitle ? ' · ' + srcTitle + ' ' + Number(q.decimal).toFixed(2) : ''))}"><b>${escH(v === 'Y' ? 'GG' : v === 'N' ? 'NG' : v)}</b><span>${escH(l)}</span>${price}</button>`;
       }).join('');
       const st = mine && mine.status ? `<span class="pill ${mine.status === 'won' ? 'green' : mine.status === 'void' ? '' : 'red'} xs">${mine.status === 'won' ? '+' + mine.points + ' pts' : mine.status === 'void' ? 'Void' : 'Lost'}</span>` : '';
       const pts = o.pts && o.pts[k] != null ? o.pts[k] : m.def;

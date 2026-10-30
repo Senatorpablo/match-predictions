@@ -105,4 +105,18 @@ footer{padding:48px 22px 36px;text-align:center}
 [data-theme=dark] .pill.adv-risky{background:rgba(251,113,133,.12);color:var(--red);border-color:rgba(251,113,133,.3)}
 .advisor-fields{display:flex;flex-direction:column;gap:12px}
 @media(max-width:1039px){.advisor:not(.open) .advisor-body{display:none}.page-split{display:flex;flex-direction:column}.advisor{order:-1}}
-@media(min-width:1040px){.page-split{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:28px;align-items:start}.advisor{position:sticky;top:84px;margin:0}.advisor-body{display:block!important}.advisor-chev{display:none}.advisor-toggle{cursor:default}}
+@media(min-width:1040px){.page-split{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:28px;align-items:start}.advisor{position:static;margin:0}.advisor-body{display:block!important}.advisor-chev{display:none}.advisor-toggle{cursor:default}.rail{position:sticky;top:84px;display:flex;flex-direction:column;gap:16px;align-self:start}}
+.odd{display:block;font-style:normal;font-weight:800;font-size:.78rem;letter-spacing:-.02em;color:#0f7a40}.odd-src{font-style:normal;font-size:.6rem;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.opt.on .odd,.opt.on .odd-src{color:rgba(255,255,255,.92)}.opt{min-height:64px}
+.slip-panel{padding:16px 16px 18px}.slip-head{margin-bottom:8px}.slip-leg{display:flex;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--card-b)}.slip-stake{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.odds-fields{border:1px solid var(--card-b);border-radius:16px;padding:10px 12px;background:var(--input)}.odds-fields summary{cursor:pointer;font-weight:700}.odds-row{display:grid;grid-template-columns:70px repeat(3,minmax(0,1fr));gap:8px;align-items:end;margin-top:8px}.odds-row label{font-size:.72rem}.odds-row input{padding:8px 10px}
+@media(max-width:1039px){
+  .rail{order:-1}
+  .slip-bar{position:fixed;left:12px;right:12px;bottom:74px;z-index:25;display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border:0;border-radius:999px;background:#0f7a40;color:#fff;font:700 .95rem Inter,sans-serif;box-shadow:0 10px 24px rgba(15,122,64,.28);cursor:pointer}
+  .slip-panel{display:none}
+  .slip-dock.open .slip-panel{display:block;position:fixed;left:0;right:0;bottom:0;z-index:40;max-height:78vh;overflow:auto;border-radius:22px 22px 0 0}
+  .slip-dock.open .slip-bar{display:none}
+  body:has(.slip-bar){padding-bottom:148px}
+}
+@media(min-width:1040px){.slip-bar,.slip-close{display:none!important}}
+@media(max-width:720px){.odds-row{grid-template-columns:1fr 1fr}}
