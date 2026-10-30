@@ -9,11 +9,11 @@
   font-size: .8rem;
   font-weight: 600;
   text-align: center;
-  color: var(--gold);
-  background: rgba(245, 185, 66, .14);
-  border-bottom: 1px solid rgba(245, 185, 66, .28);
+  color: #8a5a00;
+  background: #fff6e8;
+  border-bottom: 1px solid #f3e0b8;
 }
-[data-theme=light] .demo-banner { color: #8a5a00; background: rgba(245, 185, 66, .28); }
+[data-theme=dark] .demo-banner { color: #f6d48a; background: rgba(246, 212, 138, .12); border-bottom-color: rgba(246, 212, 138, .28); }
 .demo-banner select,
 .demo-banner button {
   font: 600 .75rem Inter, system-ui, sans-serif;

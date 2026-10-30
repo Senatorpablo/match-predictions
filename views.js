@@ -16,10 +16,10 @@ function layout({ title, body, user, flash, active }) {
   const links = nav.map(([k, h, l]) => `<a href="${h}" class="${k === active ? 'on' : ''}">${l}</a>`).join('');
   const icons = { home: '⌂', fixtures: '⚽', leaderboard: '🏆', me: '★', admin: '⚙' };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>${esc(title)} · Matchday</title><meta name="theme-color" content="#0b1020"><meta name="description" content="Pick match markets and climb the leaderboard.">
+<title>${esc(title)} · Matchday</title><meta name="theme-color" content="#f6f7f4"><meta name="description" content="Pick match markets and climb the leaderboard.">
 <link rel="manifest" href="/manifest.json"><link rel="icon" href="/icons/icon-192.png"><link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/styles.css"><script>document.documentElement.dataset.theme=localStorage.theme||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')</script></head>
+<link rel="stylesheet" href="/styles.css"><script>document.documentElement.dataset.theme=localStorage.theme==='dark'?'dark':'light'</script></head>
 <body><div class="bg"></div>
 <header class="top"><div class="wrap row"><a href="/" class="brand"><img src="/icons/icon-192.png" alt=""><span>Matchday</span></a>
 <nav class="desk">${links}</nav><div class="row gap">
