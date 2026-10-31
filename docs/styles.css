@@ -120,3 +120,11 @@ footer{padding:48px 22px 36px;text-align:center}
 }
 @media(min-width:1040px){.slip-bar,.slip-close{display:none!important}}
 @media(max-width:720px){.odds-row{grid-template-columns:1fr 1fr}}
+/* Simpler fixtures: extra markets folded away, sidebar below the list on phones */
+.more-mkts{border-top:1px dashed var(--card-b);padding-top:10px}
+.more-mkts>summary{list-style:none;cursor:pointer;display:flex;justify-content:center;align-items:center;gap:6px;font-size:.85rem;font-weight:700;color:var(--accent);padding:4px 0}
+.more-mkts>summary::-webkit-details-marker{display:none}
+.more-mkts>summary::after{content:'▾';transition:transform .15s}.more-mkts[open]>summary::after{transform:rotate(180deg)}
+.more-mkts>summary span{font-size:.72rem;color:var(--muted);background:var(--input);border-radius:99px;padding:1px 7px}
+.more-mkts .mkts-inner{display:flex;flex-direction:column;gap:16px;margin-top:12px}
+@media(max-width:1039px){.advisor,.rail{order:0!important}.rail{margin-top:18px}}

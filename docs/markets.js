@@ -40,7 +40,7 @@
       const btns = m.opts.map(([v, l]) => {
         const on = mine && mine.selection === v, inSlip = o.draft && o.draft[k] === v, cls = ['opt', on ? 'on' : '', inSlip ? 'in-slip' : '', on && mine.status ? mine.status : '', win === v ? 'hit' : ''].filter(Boolean).join(' ');
         const q = o.quote ? o.quote(k, v) : null;
-        const price = q ? `<em class="odd">${Number(q.decimal).toFixed(2)}</em><i class="odd-src">${q.source === 'admin' ? 'Admin' : 'Est.'}</i>` : '';
+        const price = q ? `<em class="odd">${Number(q.decimal).toFixed(2)}</em>` : '';
         const srcTitle = q ? (q.source === 'admin' ? 'Set by admin' : 'Estimated') : '';
         return `<button class="${cls}" name="selection" value="${escH(v)}" ${o.open ? '' : 'disabled'} aria-pressed="${on ? 'true' : 'false'}" title="${escH(m.name + ': ' + l + (srcTitle ? ' · ' + srcTitle + ' ' + Number(q.decimal).toFixed(2) : ''))}"><b>${escH(v === 'Y' ? 'GG' : v === 'N' ? 'NG' : v)}</b><span>${escH(l)}</span>${price}</button>`;
       }).join('');
@@ -48,7 +48,12 @@
       const pts = o.pts && o.pts[k] != null ? o.pts[k] : m.def;
       return `<form method="post" action="${escH(o.action)}" class="mkt" data-market="${k}"><input type="hidden" name="market" value="${k}"><div class="mkt-h"><span>${escH(m.name)}</span>${st || `<span class="mkt-pts">${pts} pt${pts == 1 ? '' : 's'}</span>`}</div><div class="opts n${m.opts.length}">${btns}</div></form>`;
     });
-    return blocks.length ? `<div class="mkts${o.open ? '' : ' closed'}">${blocks.join('')}</div>` : '';
+    if (!blocks.length) return '';
+    // Keep it simple: show the first market, tuck the rest behind "More markets".
+    const keys = list(f.markets), first = blocks[0], rest = blocks.slice(1);
+    const restPicked = keys.slice(1).some(k => picks[k] || (o.draft && o.draft[k]));
+    const more = rest.length ? `<details class="more-mkts"${restPicked ? ' open' : ''}><summary>More markets <span>${rest.length}</span></summary><div class="mkts-inner">${rest.join('')}</div></details>` : '';
+    return `<div class="mkts${o.open ? '' : ' closed'}">${first}${more}</div>`;
   }
   return { render, MARKETS, ORDER, DEFAULT, list, valid, settle, label, res };
 });

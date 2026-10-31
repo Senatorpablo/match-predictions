@@ -174,9 +174,8 @@
       preds: state.picks.length
     };
     return `<section class="hero"><span class="pill glow">Season is live</span><h1>Call the match.<br><span class="grad">Own the table.</span></h1>
-      <p class="lead muted">Pick match result, double chance, over/under, GG/NG, draw no bet and 1st half. Points only, bragging rights included.</p>
-      <div class="row gap wrapr">${user ? `<a class="btn lg" href="#/fixtures">Make predictions</a><a class="btn ghost lg" href="#/me">My picks</a>` : `<a class="btn lg" href="#/signup">Start predicting — free</a><a class="btn ghost lg" href="#/fixtures">Browse fixtures</a>`}</div>
-      <div class="stats">${[['Fixtures', stats.fixtures], ['Players', stats.players], ['Predictions', stats.preds]].map(([l, v]) => `<div><b data-count="${v}">${v}</b><span>${l}</span></div>`).join('')}</div></section>
+      <p class="lead muted">Pick who wins each match, earn points, top the table. Free, no money involved.</p>
+      <div class="row gap wrapr">${user ? `<a class="btn lg" href="#/fixtures">Make predictions</a><a class="btn ghost lg" href="#/me">My picks</a>` : `<a class="btn lg" href="#/signup">Start predicting — free</a><a class="btn ghost lg" href="#/fixtures">Browse fixtures</a>`}</div></section>
       <div class="grid2"><section><div class="sec-h"><h2>Up next</h2><a href="#/fixtures" class="link">All fixtures →</a></div>
       ${upcoming.length ? upcoming.map(f => fixtureCard(f, null, false)).join('') : empty('📅', 'No upcoming fixtures', 'The admin will add the next round soon.')}</section>
       <section><div class="sec-h"><h2>Top predictors</h2><a href="#/leaderboard" class="link">Full table →</a></div>
@@ -196,7 +195,7 @@
     const list = lists[cur];
     const groups = Object.create(null);
     list.forEach(f => { (groups[f.competition] ||= []).push(f); });
-    return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
+    return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Fixtures</h1><p class="muted">Tap to pick, tap again to undo. Picks lock at kickoff.</p></div>
       <div class="tabs">${tabs.map(([k, l, n]) => `<a href="#/fixtures?tab=${k}" class="${k === cur ? 'on' : ''}">${l} <span>${n}</span></a>`).join('')}</div>
       ${list.length ? Object.entries(groups).map(([c, rows]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${rows.map(f => fixtureCard(f, user, true)).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}</div>
       ${rail(user)}</div>`;
@@ -213,7 +212,7 @@
     const groups = Object.values(byF).sort((a, b) => Date.parse(b.f.kickoff) - Date.parse(a.f.kickoff));
     const stPill = i => i.st == null ? '<span class="pill xs">Pending</span>' : i.st === 'void' ? '<span class="pill xs">Void</span>' : i.pts > 0 ? `<span class="pill green xs">+${i.pts}</span>` : '<span class="pill red xs">0</span>';
     const acc = settled.length ? Math.round(100 * settled.filter(r => r.points > 0).length / settled.length) : 0;
-    return `<div class="page-split"><div class="page-main"><div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
+    return `<div class="page-split"><div class="page-main"><div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div><a class="btn ghost sm" href="#/slips">My slips</a></div>
       <div class="stats card"><div><b>${me?.pts ?? 0}</b><span>Points</span></div><div><b>${rank ? '#' + rank : '–'}</b><span>of ${lb.length}</span></div><div><b>${acc}%</b><span>Accuracy</span></div><div><b>${me?.won ?? 0}</b><span>Won</span></div></div>
       <div class="sec-h"><h2>Pick history</h2></div>
       ${groups.length ? `<div class="card list">${groups.map(({ f: r, items }) => { const tot = items.reduce((a, i) => a + (i.pts || 0), 0), pend = items.every(i => i.st == null);
@@ -353,9 +352,8 @@
 
   function shell(user, active, body) {
     const nav = [['home', '#/', 'Home'], ['fixtures', '#/fixtures', 'Fixtures'], ['leaderboard', '#/leaderboard', 'Leaderboard']];
-    if (user) nav.push(['slips', '#/slips', 'Slips']);
-    if (user) nav.push(['me', '#/me', 'My picks']);
-    if (user) nav.push(['admin', '#/admin', 'Admin']);
+        if (user) nav.push(['me', '#/me', 'My picks']);
+    if (user?.is_admin) nav.push(['admin', '#/admin', 'Admin']);
     const links = nav.map(([k, h, l]) => `<a href="${h}" class="${k === active ? 'on' : ''}">${l}</a>`).join('');
     const who = state.users.slice().sort((a, b) => a.is_admin - b.is_admin || a.id - b.id);
     const toast = flash ? `<div class="toast ${flash.type}" role="status">${esc(flash.msg)}</div>` : '';

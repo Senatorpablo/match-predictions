@@ -102,7 +102,7 @@ const app = require('../server'); const srv = app.listen(0, async () => {
     const fxHtml = pages.find(([u]) => u === '/fixtures')[1];
     assert.ok(fxHtml.includes('Pick advisor') && /not a guarantee/i.test(fxHtml) && /no real money/i.test(fxHtml));
     const resultsHtml = pages.find(([u]) => u === '/fixtures?tab=results')[1];
-    assert.ok(fxHtml.includes('Combined slip') && resultsHtml.includes('class="odd"') && resultsHtml.includes('Est.'));
+    assert.ok(fxHtml.includes('Combined slip') && resultsHtml.includes('class="odd"') && resultsHtml.includes('Estimated'));
     assert.ok(!/live bookmaker/i.test(fxHtml) || /not live bookmaker/i.test(fxHtml));
     assert.strictEqual((await fetch(base + '/advisor.js')).status, 200);
     const V = require('../views');

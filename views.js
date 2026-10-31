@@ -14,7 +14,6 @@ const ptsPill = p => p == null ? '<span class="pill">Pending</span>' : `<span cl
 
 function layout({ title, body, user, flash, active }) {
   const nav = [['home', '/', 'Home'], ['fixtures', '/fixtures', 'Fixtures'], ['leaderboard', '/leaderboard', 'Leaderboard']];
-  if (user) nav.push(['slips', '/slips', 'Slips']);
   if (user) nav.push(['me', '/me', 'My picks']);
   if (user?.is_admin) nav.push(['admin', '/admin', 'Admin']);
   const links = nav.map(([k, h, l]) => `<a href="${h}" class="${k === active ? 'on' : ''}">${l}</a>`).join('');
@@ -53,9 +52,8 @@ const fixtureCard = (f, user, picks, s, draft) => {
 
 function home({ user, upcoming, results, top, stats }) {
   return `<section class="hero"><span class="pill glow">Season is live</span><h1>Call the match.<br><span class="grad">Own the table.</span></h1>
-  <p class="lead muted">Pick match result, double chance, over/under, GG/NG, draw no bet and 1st half. Points only, bragging rights included.</p>
-  <div class="row gap wrapr">${user ? `<a class="btn lg" href="/fixtures">Make predictions</a><a class="btn ghost lg" href="/me">My picks</a>` : `<a class="btn lg" href="/signup">Start predicting — free</a><a class="btn ghost lg" href="/fixtures">Browse fixtures</a>`}</div>
-  <div class="stats">${[['Fixtures', stats.fixtures], ['Players', stats.players], ['Predictions', stats.preds]].map(([l, v]) => `<div><b data-count="${v}">${v}</b><span>${l}</span></div>`).join('')}</div></section>
+  <p class="lead muted">Pick who wins each match, earn points, top the table. Free, no money involved.</p>
+  <div class="row gap wrapr">${user ? `<a class="btn lg" href="/fixtures">Make predictions</a><a class="btn ghost lg" href="/me">My picks</a>` : `<a class="btn lg" href="/signup">Start predicting — free</a><a class="btn ghost lg" href="/fixtures">Browse fixtures</a>`}</div></section>
   <div class="grid2"><section><div class="sec-h"><h2>Up next</h2><a href="/fixtures" class="link">All fixtures →</a></div>
   ${upcoming.length ? upcoming.map(f => fixtureCard(f, null, false)).join('') : empty('📅', 'No upcoming fixtures', 'The admin will add the next round soon.')}</section>
   <section><div class="sec-h"><h2>Top predictors</h2><a href="/leaderboard" class="link">Full table →</a></div>
@@ -72,7 +70,7 @@ function fixtures({ fx, picks = {}, user, tab, s, slip, legs, draft = {}, balanc
   const tabs = [['upcoming', 'Upcoming', up.length], ['live', 'In play / awaiting', lk.length], ['results', 'Results', res.length]];
   const list = lists[cur];
   const groups = {}; list.forEach(f => (groups[f.competition] ||= []).push(f));
-  return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Fixtures</h1><p class="muted">Tap an option in each market to pick it — tap again to remove. Picks lock at kickoff.</p></div>
+  return `<div class="page-split"><div class="page-main"><div class="page-h"><h1>Fixtures</h1><p class="muted">Tap to pick, tap again to undo. Picks lock at kickoff.</p></div>
   <div class="tabs">${tabs.map(([k, l, n]) => `<a href="?tab=${k}" class="${k === cur ? 'on' : ''}">${l} <span>${n}</span></a>`).join('')}</div>
   ${list.length ? Object.entries(groups).map(([c, l]) => `<h3 class="comp">${esc(c)}</h3><div class="cards">${l.map(f => fixtureCard(f, user, picks[f.id], s, draft[f.id])).join('')}</div>`).join('') : empty(cur === 'results' ? '📊' : '📅', cur === 'results' ? 'No results yet' : 'Nothing here right now', cur === 'upcoming' ? 'New fixtures will appear once the admin publishes them.' : 'Check back after kickoff.')}</div>
   ${rail(user, legs, balance, slip)}</div>`;
@@ -86,7 +84,7 @@ function me({ user, picks = [], rank, total, me, slip, legs, balance }) {
   for (const k of shown) (byF[k.fixture_id] ||= { f: k, items: [] }).items.push({ m: M.MARKETS[k.market].name, sel: M.label(k.market, k.selection), pts: k.points, st: k.status });
   const groups = Object.values(byF).sort((a, b) => Date.parse(b.f.kickoff) - Date.parse(a.f.kickoff));
   const stPill = i => i.st == null ? '<span class="pill xs">Pending</span>' : i.st === 'void' ? '<span class="pill xs">Void</span>' : i.st === 'won' || i.pts > 0 ? `<span class="pill green xs">+${i.pts}</span>` : '<span class="pill red xs">0</span>';
-  return `<div class="page-split"><div class="page-main"><div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div></div>
+  return `<div class="page-split"><div class="page-main"><div class="page-h row between wrapr"><div class="row gap">${badge(user.name, 'xl')}<div><h1>${esc(user.name)}</h1><p class="muted">${esc(user.email)}</p></div></div><a class="btn ghost sm" href="/slips">My slips</a></div>
   <div class="stats card"><div><b>${me?.pts ?? 0}</b><span>Points</span></div><div><b>${rank ? '#' + rank : '–'}</b><span>of ${total}</span></div><div><b>${acc}%</b><span>Accuracy</span></div><div><b>${me?.won ?? 0}</b><span>Won</span></div></div>
   <div class="sec-h"><h2>Pick history</h2></div>
   ${groups.length ? `<div class="card list">${groups.map(({ f: r, items }) => { const tot = items.reduce((a, i) => a + (i.pts || 0), 0), pend = items.every(i => i.st == null);
